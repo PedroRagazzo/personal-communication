@@ -1,0 +1,71 @@
+# Infraestrutura de desenvolvimento local para o TORA DOS BURRO.
+# Não inclui a aplicação em si (isso começa na FASE 1 do roadmap) — só as
+# dependências de Data Plane e Media Plane que o backend vai precisar.
+#
+# Tags de imagem abaixo são um ponto de partida seguro; confirme a versão
+# estável mais recente de cada uma no momento em que a FASE 1 for iniciada
+# (Regra 8 do projeto: verificar compatibilidade entre versões).
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: tora
+      POSTGRES_PASSWORD: tora_dev_password
+      POSTGRES_DB: tora_dos_burro_dev
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tora"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # TURN/STUN para fallback de NAT traversal do WebRTC (FASE 6+).
+  # Credenciais são geradas via TURN REST API (static-auth-secret abaixo),
+  # nunca usuário/senha estático — ver docs/security.md.
+  coturn:
+    image: coturn/coturn:latest
+    restart: unless-stopped
+    network_mode: host
+    volumes:
+      - ./docker/coturn/turnserver.conf:/etc/coturn/turnserver.conf:ro
+    command: ["-c", "/etc/coturn/turnserver.conf"]
+
+  # Object storage compatível com S3 para anexos de mensagem (FASE 4/10).
+  # Em produção, a mesma abstração ObjectStorage aponta para S3/R2 real.
+  minio:
+    image: minio/minio:latest
+    restart: unless-stopped
+    environment:
+      MINIO_ROOT_USER: tora
+      MINIO_ROOT_PASSWORD: tora_dev_password
+    ports:
+      - "9000:9000"   # API S3-compatível
+      - "9001:9001"   # Console web
+    command: server /data --console-address ":9001"
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:
+  minio_data:
