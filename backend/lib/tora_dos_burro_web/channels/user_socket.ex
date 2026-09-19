@@ -8,6 +8,7 @@ defmodule ToraDosBurroWeb.UserSocket do
   use Phoenix.Socket
 
   channel "channel:*", ToraDosBurroWeb.ChatChannel
+  channel "voice:*", ToraDosBurroWeb.VoiceChannel
 
   @impl true
   def connect(%{"token" => token}, socket, _connect_info) do

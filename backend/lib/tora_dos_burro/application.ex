@@ -12,6 +12,7 @@ defmodule ToraDosBurro.Application do
       ToraDosBurro.Repo,
       {DNSCluster, query: Application.get_env(:tora_dos_burro, :dns_cluster_query) || :ignore},
       {Phoenix.PubSub, name: ToraDosBurro.PubSub},
+      ToraDosBurroWeb.Presence,
       # Start a worker by calling: ToraDosBurro.Worker.start_link(arg)
       # {ToraDosBurro.Worker, arg},
       # Start to serve requests, typically the last entry

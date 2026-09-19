@@ -46,6 +46,21 @@ Mute/Deafen = track local habilitado/desabilitado + metadata no Presence
 Sair → desmonta todas as peer connections + untrack no Presence
 ```
 
+**Lado do servidor implementado (FASE 6)**: `ToraDosBurroWeb.VoiceChannel` no tópico
+`voice:{channel_id}` — `join` exige que o canal seja `guild_voice` e checa
+`:connect` via `Channels.authorize/3` (respeita `permission_overwrites` da
+FASE 5); `Phoenix.Presence` (`ToraDosBurroWeb.Presence`) rastreia quem está
+na sala com metadata `muted`/`deafened`; eventos `sdp:offer`, `sdp:answer`,
+`ice:candidate` (todos com `to`/`from`) e `state:update` (mute/deafen) são
+retransmitidos via `broadcast_from!` — cada cliente filtra pelo `to`. Sem
+tabela nova: é tudo efêmero em Presence, como o `database.md` já previa.
+
+**Ainda não implementado** (depende do cliente Electron, FASE 11): as peer
+connections WebRTC de verdade, perfect negotiation, STUN/coturn, e o cap de
+4 participantes com vídeo (só se aplica quando vídeo existir, FASE 7 — o
+cap de ~8 só-áudio desta fase é a recomendação acima, não um limite
+travado no código ainda).
+
 ## Fluxo de vídeo
 
 Ligar câmera = adicionar `VideoTrack` às peer connections existentes do canal + renegociar. Seleção de dispositivo/resolução/FPS no cliente. **Escopo limitado a canais de voz de servidor no MVP** (não chamadas em DM — quando Amigos/DM entrar pós-MVP, reaproveita o mesmo mecanismo). Cap de 4 participantes com vídeo aplicado no servidor no momento de **adicionar a track**, não só no join do canal.
