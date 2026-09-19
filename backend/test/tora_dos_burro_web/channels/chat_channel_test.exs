@@ -106,6 +106,49 @@ defmodule ToraDosBurroWeb.ChatChannelTest do
     assert_broadcast "message:reaction", %{emoji: "👍"}
   end
 
+  test "remover reação é retransmitido para o canal", %{
+    owner: owner,
+    other: other,
+    channel: channel
+  } do
+    other_id = other.id
+
+    owner_socket = connect_as(owner)
+    other_socket = connect_as(other)
+
+    {:ok, _, owner_channel} = subscribe_and_join(owner_socket, "channel:#{channel.id}", %{})
+    {:ok, _, other_channel} = subscribe_and_join(other_socket, "channel:#{channel.id}", %{})
+
+    ref = push(owner_channel, "message:create", %{"content" => "oi"})
+    assert_reply ref, :ok, %{id: message_id}
+
+    ref2 = push(other_channel, "message:reaction", %{"message_id" => message_id, "emoji" => "👍"})
+    assert_reply ref2, :ok
+    assert_broadcast "message:reaction", %{emoji: "👍"}
+
+    ref3 =
+      push(other_channel, "message:reaction:remove", %{"message_id" => message_id, "emoji" => "👍"})
+
+    assert_reply ref3, :ok
+    assert_broadcast "message:reaction:remove", %{emoji: "👍", user_id: ^other_id}
+  end
+
+  test "remover reação que não existe é idempotente (não dá erro)", %{
+    owner: owner,
+    channel: channel
+  } do
+    owner_socket = connect_as(owner)
+    {:ok, _, owner_channel} = subscribe_and_join(owner_socket, "channel:#{channel.id}", %{})
+
+    ref = push(owner_channel, "message:create", %{"content" => "oi"})
+    assert_reply ref, :ok, %{id: message_id}
+
+    ref2 =
+      push(owner_channel, "message:reaction:remove", %{"message_id" => message_id, "emoji" => "👍"})
+
+    assert_reply ref2, :ok
+  end
+
   test "digitação é retransmitida só para os outros (broadcast_from)", %{
     owner: owner,
     other: other,

@@ -1,14 +1,22 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react'
-import type { ChannelSummary, ServerMember } from '../services/api'
+import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
+import type { ChannelSummary, ChatMessage, ServerMember } from '../services/api'
 import { useChatStore } from '../stores/chatStore'
+
+// Emojis fixos pra reação rápida — sem picker/dependência nova (FASE 11,
+// fatia 8). Clicar num já reagido por mim remove; clicar num não reagido
+// adiciona. O servidor sempre revalida (idempotente nos dois sentidos),
+// aqui é só a UI que decide qual dos dois eventos mandar.
+const QUICK_REACTIONS = ['👍', '❤️', '😂', '🎉', '😮', '😢']
 
 export function ChatView({
   channel,
   accessToken,
+  currentUserId,
   members
 }: {
   channel: ChannelSummary
   accessToken: string
+  currentUserId: string
   members: ServerMember[]
 }) {
   const messages = useChatStore((s) => s.messages)
@@ -17,7 +25,14 @@ export function ChatView({
   const joinChannel = useChatStore((s) => s.joinChannel)
   const leaveChannel = useChatStore((s) => s.leaveChannel)
   const sendMessage = useChatStore((s) => s.sendMessage)
+  const editMessage = useChatStore((s) => s.editMessage)
+  const deleteMessage = useChatStore((s) => s.deleteMessage)
+  const addReaction = useChatStore((s) => s.addReaction)
+  const removeReaction = useChatStore((s) => s.removeReaction)
   const [draft, setDraft] = useState('')
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editDraft, setEditDraft] = useState('')
+  const [reactingTo, setReactingTo] = useState<string | null>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -42,6 +57,35 @@ export function ChatView({
     setDraft('')
   }
 
+  function startEdit(message: ChatMessage): void {
+    setEditingId(message.id)
+    setEditDraft(message.content)
+  }
+
+  function submitEdit(id: string): void {
+    if (editDraft.trim()) editMessage(id, editDraft)
+    setEditingId(null)
+  }
+
+  function handleEditKeyDown(e: KeyboardEvent<HTMLInputElement>, id: string): void {
+    if (e.key === 'Enter') submitEdit(id)
+    if (e.key === 'Escape') setEditingId(null)
+  }
+
+  function handleDelete(id: string): void {
+    if (window.confirm('Apagar esta mensagem?')) deleteMessage(id)
+  }
+
+  function toggleReaction(message: ChatMessage, emoji: string): void {
+    const reaction = message.reactions.find((r) => r.emoji === emoji)
+    if (reaction?.user_ids.includes(currentUserId)) {
+      removeReaction(message.id, emoji)
+    } else {
+      addReaction(message.id, emoji)
+    }
+    setReactingTo(null)
+  }
+
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
       <div className="flex-1 overflow-y-auto px-4 py-3">
@@ -50,18 +94,108 @@ export function ChatView({
         {!loading && messages.length === 0 && (
           <p className="text-sm text-neutral-600">Nenhuma mensagem ainda — seja o primeiro a escrever.</p>
         )}
-        {messages.map((message) => (
-          <div key={message.id} className="mb-2">
-            <span className="text-sm font-semibold text-neutral-200">{authorName(message.author_id)}</span>{' '}
-            <span className="text-xs text-neutral-600">
-              {new Date(message.inserted_at).toLocaleTimeString('pt-BR', {
-                hour: '2-digit',
-                minute: '2-digit'
-              })}
-            </span>
-            <p className="text-sm break-words text-neutral-300">{message.content}</p>
-          </div>
-        ))}
+        {messages.map((message) => {
+          const isMine = message.author_id === currentUserId
+          const isEditing = editingId === message.id
+
+          return (
+            <div key={message.id} className="group mb-2 rounded px-1 py-0.5 hover:bg-neutral-900">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0 flex-1">
+                  <span className="text-sm font-semibold text-neutral-200">
+                    {authorName(message.author_id)}
+                  </span>{' '}
+                  <span className="text-xs text-neutral-600">
+                    {new Date(message.inserted_at).toLocaleTimeString('pt-BR', {
+                      hour: '2-digit',
+                      minute: '2-digit'
+                    })}
+                  </span>
+                  {message.edited_at && <span className="ml-1 text-xs text-neutral-600">(editado)</span>}
+
+                  {isEditing ? (
+                    <input
+                      autoFocus
+                      value={editDraft}
+                      onChange={(e) => setEditDraft(e.target.value)}
+                      onKeyDown={(e) => handleEditKeyDown(e, message.id)}
+                      onBlur={() => submitEdit(message.id)}
+                      className="mt-1 block w-full rounded bg-neutral-800 px-2 py-1 text-sm text-neutral-100 outline-none focus:ring-2 focus:ring-indigo-500"
+                    />
+                  ) : (
+                    <p className="text-sm break-words text-neutral-300">{message.content}</p>
+                  )}
+                </div>
+
+                <div className="hidden shrink-0 items-center gap-1 text-xs text-neutral-500 group-hover:flex">
+                  <button
+                    onClick={() => setReactingTo(reactingTo === message.id ? null : message.id)}
+                    title="Reagir"
+                    className="rounded px-1.5 py-0.5 hover:bg-neutral-800"
+                  >
+                    😊
+                  </button>
+                  {isMine && !isEditing && (
+                    <>
+                      <button
+                        onClick={() => startEdit(message)}
+                        title="Editar"
+                        className="rounded px-1.5 py-0.5 hover:bg-neutral-800"
+                      >
+                        ✏️
+                      </button>
+                      <button
+                        onClick={() => handleDelete(message.id)}
+                        title="Apagar"
+                        className="rounded px-1.5 py-0.5 hover:bg-neutral-800"
+                      >
+                        🗑️
+                      </button>
+                    </>
+                  )}
+                </div>
+              </div>
+
+              {reactingTo === message.id && (
+                <div className="mt-1 flex gap-1">
+                  {QUICK_REACTIONS.map((emoji) => (
+                    <button
+                      key={emoji}
+                      onClick={() => toggleReaction(message, emoji)}
+                      aria-label={`Reagir com ${emoji}`}
+                      className="rounded bg-neutral-800 px-1.5 py-0.5 text-sm hover:bg-neutral-700"
+                    >
+                      {emoji}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {message.reactions.length > 0 && (
+                <div className="mt-1 flex flex-wrap gap-1">
+                  {message.reactions.map((reaction) => {
+                    const mine = reaction.user_ids.includes(currentUserId)
+                    return (
+                      <button
+                        key={reaction.emoji}
+                        onClick={() => toggleReaction(message, reaction.emoji)}
+                        title={reaction.user_ids.map(authorName).join(', ')}
+                        aria-label={`Reação ${reaction.emoji}, ${reaction.count} ${reaction.count === 1 ? 'pessoa' : 'pessoas'}`}
+                        className={`rounded-full px-2 py-0.5 text-xs transition ${
+                          mine
+                            ? 'bg-indigo-900 text-indigo-200 ring-1 ring-indigo-500'
+                            : 'bg-neutral-800 text-neutral-400 hover:bg-neutral-700'
+                        }`}
+                      >
+                        {reaction.emoji} {reaction.count}
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          )
+        })}
         <div ref={bottomRef} />
       </div>
       <form onSubmit={handleSubmit} className="flex items-center gap-2 border-t border-neutral-800 p-3">

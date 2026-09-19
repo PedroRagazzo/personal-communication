@@ -71,7 +71,12 @@ export function HomePage() {
           </div>
         </header>
         {selectedChannel && selectedChannel.type === 'guild_text' && (
-          <ChatView channel={selectedChannel} accessToken={accessToken} members={members} />
+          <ChatView
+            channel={selectedChannel}
+            accessToken={accessToken}
+            currentUserId={user.id}
+            members={members}
+          />
         )}
         {selectedChannel && selectedChannel.type === 'guild_voice' && (
           <VoicePanel channel={selectedChannel} currentUserId={user.id} members={members} />

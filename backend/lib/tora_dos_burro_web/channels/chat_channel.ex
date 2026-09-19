@@ -75,6 +75,21 @@ defmodule ToraDosBurroWeb.ChatChannel do
     end
   end
 
+  def handle_in("message:reaction:remove", %{"message_id" => id, "emoji" => emoji}, socket) do
+    user = socket.assigns.current_user
+
+    case Chat.fetch_message(socket.assigns.channel, id) do
+      {:ok, message} ->
+        :ok = Chat.remove_reaction(message, user, emoji)
+        payload = %{message_id: id, emoji: emoji, user_id: user.id}
+        broadcast!(socket, "message:reaction:remove", payload)
+        {:reply, :ok, socket}
+
+      {:error, reason} ->
+        {:reply, {:error, %{reason: inspect(reason)}}, socket}
+    end
+  end
+
   def handle_in("typing:start", _params, socket) do
     broadcast_from!(socket, "typing:start", %{user_id: socket.assigns.current_user.id})
     {:noreply, socket}

@@ -146,6 +146,12 @@ export function listMembers(accessToken: string, serverId: string): Promise<Serv
   }).then((res) => res.members)
 }
 
+export interface MessageReaction {
+  emoji: string
+  count: number
+  user_ids: string[]
+}
+
 export interface ChatMessage {
   id: string
   channel_id: string
@@ -154,6 +160,7 @@ export interface ChatMessage {
   reply_to_id: string | null
   edited_at: string | null
   inserted_at: string
+  reactions: MessageReaction[]
 }
 
 export function listMessages(accessToken: string, channelId: string): Promise<ChatMessage[]> {
