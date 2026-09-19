@@ -22,11 +22,16 @@ interface VoiceState {
   channelId: string | null
   participants: VoiceParticipant[]
   localMuted: boolean
-  remoteStreams: Record<string, MediaStream>
+  remoteAudioStreams: Record<string, MediaStream>
+  screenSharing: boolean
+  localScreenStream: MediaStream | null
+  remoteScreenStreams: Record<string, MediaStream>
   error: string | null
   join: (channelId: string, currentUserId: string) => Promise<void>
   leave: () => void
   toggleMute: () => void
+  startScreenShare: (sourceId: string) => Promise<void>
+  stopScreenShare: () => void
 }
 
 let phoenixChannel: Channel | null = null
@@ -37,7 +42,10 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
   channelId: null,
   participants: [],
   localMuted: false,
-  remoteStreams: {},
+  remoteAudioStreams: {},
+  screenSharing: false,
+  localScreenStream: null,
+  remoteScreenStreams: {},
   error: null,
 
   join: async (channelId, currentUserId) => {
@@ -70,14 +78,32 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
         channel.push(event, { to: toUserId, ...payload })
       },
       {
-        onRemoteStream: (peerId, stream) => {
-          set((state) => ({ remoteStreams: { ...state.remoteStreams, [peerId]: stream } }))
+        onRemoteTrack: (peerId, track, stream) => {
+          if (track.kind === 'audio') {
+            set((state) => ({ remoteAudioStreams: { ...state.remoteAudioStreams, [peerId]: stream } }))
+          } else {
+            set((state) => ({ remoteScreenStreams: { ...state.remoteScreenStreams, [peerId]: stream } }))
+          }
         },
-        onRemoteStreamEnded: (peerId) => {
+        onRemoteTrackEnded: (peerId, kind) => {
           set((state) => {
-            const rest = { ...state.remoteStreams }
+            if (kind === 'audio') {
+              const rest = { ...state.remoteAudioStreams }
+              delete rest[peerId]
+              return { remoteAudioStreams: rest }
+            }
+            const rest = { ...state.remoteScreenStreams }
             delete rest[peerId]
-            return { remoteStreams: rest }
+            return { remoteScreenStreams: rest }
+          })
+        },
+        onPeerRemoved: (peerId) => {
+          set((state) => {
+            const audio = { ...state.remoteAudioStreams }
+            const screen = { ...state.remoteScreenStreams }
+            delete audio[peerId]
+            delete screen[peerId]
+            return { remoteAudioStreams: audio, remoteScreenStreams: screen }
           })
         }
       }
@@ -136,7 +162,16 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
     mesh = null
     phoenixChannel?.leave()
     phoenixChannel = null
-    set({ status: 'idle', channelId: null, participants: [], remoteStreams: {}, localMuted: false })
+    set({
+      status: 'idle',
+      channelId: null,
+      participants: [],
+      remoteAudioStreams: {},
+      localMuted: false,
+      screenSharing: false,
+      localScreenStream: null,
+      remoteScreenStreams: {}
+    })
   },
 
   toggleMute: () => {
@@ -147,5 +182,59 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
     // no cliente, então sempre manda false.
     phoenixChannel?.push('state:update', { muted, deafened: false })
     set({ localMuted: muted })
+  },
+
+  startScreenShare: async (sourceId) => {
+    const channel = phoenixChannel
+    if (!channel || !mesh) return
+    set({ error: null })
+
+    await window.api.screenShare.selectSource(sourceId)
+
+    let stream: MediaStream
+    try {
+      // Dispara o handler de main (setDisplayMediaRequestHandler), que já
+      // sabe qual fonte liberar por causa do selectSource acima.
+      stream = await navigator.mediaDevices.getDisplayMedia({ video: true })
+    } catch (err) {
+      set({
+        error: err instanceof Error ? `compartilhamento de tela: ${err.message}` : 'falha ao capturar a tela'
+      })
+      return
+    }
+
+    // Só reivindica o slot no servidor DEPOIS que o usuário já escolheu a
+    // fonte — se alguém já está compartilhando, ele não passa pela escolha
+    // de janela à toa.
+    const reply = await new Promise<{ ok: boolean; reason?: string }>((resolve) => {
+      channel
+        .push('screen_share:start', {})
+        .receive('ok', () => resolve({ ok: true }))
+        .receive('error', (resp: { reason?: string }) => resolve({ ok: false, reason: resp?.reason }))
+    })
+
+    if (!reply.ok) {
+      stream.getTracks().forEach((track) => track.stop())
+      set({
+        error:
+          reply.reason === 'screen_share_in_use'
+            ? 'alguém já está compartilhando a tela nessa sala'
+            : 'não foi possível compartilhar a tela'
+      })
+      return
+    }
+
+    mesh.setScreenTrack(stream)
+    const track = stream.getVideoTracks()[0]
+    if (track) {
+      track.onended = () => get().stopScreenShare()
+    }
+    set({ screenSharing: true, localScreenStream: stream })
+  },
+
+  stopScreenShare: () => {
+    mesh?.setScreenTrack(null)
+    phoenixChannel?.push('screen_share:stop', {})
+    set({ screenSharing: false, localScreenStream: null })
   }
 }))

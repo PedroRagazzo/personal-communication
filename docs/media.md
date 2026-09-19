@@ -71,11 +71,56 @@ por enquanto — coturn (TURN) já está no `docker-compose.yml` mas não dá
 pra testar aqui (sem Docker, mesma limitação de sempre); falta ligar o
 cliente nele quando o ambiente permitir.
 
-**Ainda não implementado**: deafen (só mute por enquanto), indicador
+**Ainda não implementado (voz)**: deafen (só mute por enquanto), indicador
 persistente de "conectado à voz" visível fora do canal selecionado
 (hoje sair da visão do canal esconde os controles, mas a chamada continua
 ativa em segundo plano — comportamento correto, só falta a UI pra
 mostrar isso de qualquer lugar do app).
+
+**Bug real encontrado e corrigido na fatia 5, afeta desde a fatia 1**: o
+preload (`desktop/src/preload/`) nunca carregava de verdade dentro do
+Electron real — só parecia estar tudo certo porque toda verificação
+anterior rodava contra o dev server do Vite numa aba de navegador comum
+(sem preload nenhum, então a ausência de `window.api` sempre parecia
+"esperada"). Causa raiz: `sandbox: true` no `main` **não suporta preload
+em ESM** — o electron-vite gera o preload como `.mjs` por padrão, mas o
+carregador sandboxado do Electron só aceita CommonJS, e falhava com
+`SyntaxError: Cannot use import statement outside a module` sem avisar
+na tela, só no console da própria janela (só visível conectando via
+`--remoteDebuggingPort` do electron-vite e inspecionando por CDP — não
+tinha como ver isso pelo browser pane, que é uma instância Chromium
+separada sem preload nenhum). Corrigido forçando `output: { format:
+'cjs' }` no bloco `preload` do `electron.vite.config.ts`, mantendo
+`sandbox: true` (a alternativa seria desligar o sandbox, que enfraquece
+a segurança à toa — a causa era só formato de build, não precisava
+disso). **Consequência prática**: `safeStorage`/persistência de sessão
+(fatia 1) nunca tinha sido verificada de verdade dentro do Electron real
+até agora — reverificado depois do fix, funciona de ponta a ponta
+(token persistido criptografado em disco, sessão restaurada após
+"reiniciar" o app).
+
+**Lado do cliente implementado (FASE 11, fatia 5) — compartilhamento de
+tela**: `desktopCapturer.getSources()` só roda no processo `main`
+(sandbox bloqueia no renderer); `ScreenSharePicker.tsx` no renderer
+mostra a lista com miniaturas reais (sem picker nativo no Windows —
+`useSystemPicker` do Electron é experimental e só existe no macOS 15+).
+Fluxo: usuário escolhe a fonte → `window.api.screenShare.selectSource`
+avisa o `main` → `getDisplayMedia()` dispara
+`session.setDisplayMediaRequestHandler`, que já sabe o que liberar.
+`MeshManager.setScreenTrack()` adiciona a track de vídeo às mesmas peer
+connections da voz (nunca um mesh separado) — renegocia sozinho via o
+mesmo perfect negotiation. **Reivindicação do slot exclusivo
+(`screen_share:start`) só acontece depois que o usuário já escolheu a
+fonte**, não antes — assim ninguém passa pela escolha de janela à toa se
+alguém já estiver compartilhando. Verificado com hardware de verdade:
+tela real (2560×1440) capturada no Electron de verdade (via CDP, já que
+`desktopCapturer` não existe fora do Electron) e recebida — track de
+vídeo íntegra, mesma resolução — por um segundo peer completamente
+independente.
+
+**Ainda não implementado (tela)**: áudio do sistema junto com a
+transmissão (nice-to-have já documentado acima), cap/exclusividade
+refletido na UI de forma mais clara (hoje só a mensagem de erro avisa).
 
 ## Fluxo de vídeo
 

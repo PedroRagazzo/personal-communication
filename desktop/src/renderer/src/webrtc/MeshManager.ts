@@ -1,9 +1,10 @@
-// Mesh WebRTC (FASE 6 no backend, FASE 11 fatia 4 aqui): uma
+// Mesh WebRTC (FASE 6/8 no backend, FASE 11 fatias 4/5 aqui): uma
 // RTCPeerConnection por participante da sala, sinalização relayada via
 // Phoenix Channel (voice:{channel_id} — ver stores/voiceStore.ts), mídia
 // nunca passa pelo WebSocket. Nunca chamar isso fora de uma sala de voz
 // pequena (~8 participantes só-áudio) — é exatamente o limite que
-// docs/media.md documenta para o mesh.
+// docs/media.md documenta para o mesh. Tela (fatia 5) reaproveita as
+// mesmas conexões — não é um mesh separado.
 //
 // Perfect negotiation (papel polite/impolite por comparação de user_id,
 // como docs/media.md especifica) evita que duas ofertas simultâneas
@@ -14,8 +15,9 @@ export type SignalEvent = 'sdp:offer' | 'sdp:answer' | 'ice:candidate'
 export type SignalSender = (toUserId: string, event: SignalEvent, payload: Record<string, unknown>) => void
 
 export interface MeshCallbacks {
-  onRemoteStream: (peerId: string, stream: MediaStream) => void
-  onRemoteStreamEnded: (peerId: string) => void
+  onRemoteTrack: (peerId: string, track: MediaStreamTrack, stream: MediaStream) => void
+  onRemoteTrackEnded: (peerId: string, kind: 'audio' | 'video') => void
+  onPeerRemoved: (peerId: string) => void
 }
 
 const ICE_SERVERS: RTCIceServer[] = [{ urls: 'stun:stun.l.google.com:19302' }]
@@ -31,6 +33,8 @@ interface PeerEntry {
 export class MeshManager {
   private peers = new Map<string, PeerEntry>()
   private localStream: MediaStream | null = null
+  private screenStream: MediaStream | null = null
+  private screenSenders = new Map<string, RTCRtpSender>()
 
   constructor(
     private readonly localUserId: string,
@@ -49,6 +53,26 @@ export class MeshManager {
     this.localStream?.getAudioTracks().forEach((track) => {
       track.enabled = !muted
     })
+  }
+
+  // Tela (FASE 11, fatia 5): mesma peer connection da voz, não uma nova —
+  // adicionar/remover a track renegocia sozinho via perfect negotiation
+  // (onnegotiationneeded), igual docs/media.md especifica. `stream: null`
+  // para parar de compartilhar.
+  setScreenTrack(stream: MediaStream | null): void {
+    for (const [peerId, sender] of this.screenSenders) {
+      this.peers.get(peerId)?.connection.removeTrack(sender)
+    }
+    this.screenSenders.clear()
+    this.screenStream?.getTracks().forEach((track) => track.stop())
+    this.screenStream = stream
+
+    const track = stream?.getVideoTracks()[0]
+    if (!stream || !track) return
+
+    for (const [peerId, entry] of this.peers) {
+      this.screenSenders.set(peerId, entry.connection.addTrack(track, stream))
+    }
   }
 
   addPeer(peerId: string): void {
@@ -84,17 +108,25 @@ export class MeshManager {
     }
 
     connection.ontrack = (event) => {
-      const [stream] = event.streams
-      if (stream) this.callbacks.onRemoteStream(peerId, stream)
+      const stream = event.streams[0] ?? new MediaStream([event.track])
+      this.callbacks.onRemoteTrack(peerId, event.track, stream)
+      event.track.addEventListener('ended', () => {
+        this.callbacks.onRemoteTrackEnded(peerId, event.track.kind as 'audio' | 'video')
+      })
     }
 
     connection.onconnectionstatechange = () => {
       if (connection.connectionState === 'failed' || connection.connectionState === 'closed') {
-        this.callbacks.onRemoteStreamEnded(peerId)
+        this.removePeer(peerId)
       }
     }
 
     this.attachLocalTracks(connection)
+
+    if (this.screenStream) {
+      const screenTrack = this.screenStream.getVideoTracks()[0]
+      if (screenTrack) this.screenSenders.set(peerId, connection.addTrack(screenTrack, this.screenStream))
+    }
   }
 
   removePeer(peerId: string): void {
@@ -102,7 +134,8 @@ export class MeshManager {
     if (!entry) return
     entry.connection.close()
     this.peers.delete(peerId)
-    this.callbacks.onRemoteStreamEnded(peerId)
+    this.screenSenders.delete(peerId)
+    this.callbacks.onPeerRemoved(peerId)
   }
 
   async handleSignal(fromUserId: string, event: SignalEvent, payload: Record<string, unknown>): Promise<void> {
@@ -150,6 +183,9 @@ export class MeshManager {
     for (const peerId of [...this.peers.keys()]) this.removePeer(peerId)
     this.localStream?.getTracks().forEach((track) => track.stop())
     this.localStream = null
+    this.screenStream?.getTracks().forEach((track) => track.stop())
+    this.screenStream = null
+    this.screenSenders.clear()
   }
 
   private attachLocalTracks(connection: RTCPeerConnection): void {

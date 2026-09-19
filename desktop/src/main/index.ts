@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, safeStorage, session } from 'electron'
+import { app, BrowserWindow, desktopCapturer, ipcMain, safeStorage, session } from 'electron'
 import { join } from 'node:path'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 
@@ -54,11 +54,53 @@ function registerSecureStorageHandlers(): void {
 // do Electron).
 function registerPermissionHandlers(): void {
   session.defaultSession.setPermissionCheckHandler((_webContents, permission) => {
-    return permission === 'media'
+    return permission === 'media' || permission === 'display-capture'
   })
 
   session.defaultSession.setPermissionRequestHandler((_webContents, permission, callback) => {
-    callback(permission === 'media')
+    callback(permission === 'media' || permission === 'display-capture')
+  })
+}
+
+// Compartilhamento de tela (FASE 11, fatia 5): desktopCapturer só roda no
+// main (sandbox bloqueia no renderer). Sem picker nativo no Windows
+// (useSystemPicker é experimental e só existe no macOS 15+), então o
+// renderer mostra a própria tela de escolha (ScreenSharePicker.tsx) — o
+// fluxo é: renderer pede a lista de fontes, usuário escolhe, renderer avisa
+// qual foi escolhida (`select-source`) e só então chama
+// getDisplayMedia(), que dispara o handler abaixo já sabendo o que liberar.
+let pendingScreenSourceId: string | null = null
+
+function registerScreenShareHandlers(): void {
+  ipcMain.handle('screen-share:list-sources', async () => {
+    const sources = await desktopCapturer.getSources({
+      types: ['screen', 'window'],
+      thumbnailSize: { width: 300, height: 200 }
+    })
+    return sources.map((source) => ({
+      id: source.id,
+      name: source.name,
+      thumbnailDataUrl: source.thumbnail.toDataURL()
+    }))
+  })
+
+  ipcMain.handle('screen-share:select-source', (_event, sourceId: string) => {
+    pendingScreenSourceId = sourceId
+  })
+
+  session.defaultSession.setDisplayMediaRequestHandler((_request, callback) => {
+    const sourceId = pendingScreenSourceId
+    pendingScreenSourceId = null
+
+    if (!sourceId) {
+      callback({})
+      return
+    }
+
+    desktopCapturer.getSources({ types: ['screen', 'window'] }).then((sources) => {
+      const match = sources.find((source) => source.id === sourceId)
+      callback(match ? { video: match } : {})
+    })
   })
 }
 
@@ -68,10 +110,12 @@ function createWindow(): void {
     height: 800,
     show: false,
     webPreferences: {
-      // electron-vite compila o preload como ESM explícito (.mjs) mesmo com
-      // o main saindo como .js — confirmado inspecionando out/preload/ após
-      // o build, não assumido.
-      preload: join(__dirname, '../preload/index.mjs'),
+      // CommonJS (.cjs), não ESM — sandbox: true não suporta preload em
+      // ESM (Electron recusa carregar com "Cannot use import statement
+      // outside a module"). Forçado via output.format: 'cjs' no preload
+      // do electron.vite.config.ts; nome confirmado inspecionando
+      // out/preload/ após o build, não assumido.
+      preload: join(__dirname, '../preload/index.cjs'),
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true
@@ -90,6 +134,7 @@ function createWindow(): void {
 app.whenReady().then(() => {
   registerSecureStorageHandlers()
   registerPermissionHandlers()
+  registerScreenShareHandlers()
   createWindow()
 
   app.on('activate', () => {
