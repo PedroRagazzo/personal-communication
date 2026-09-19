@@ -95,6 +95,16 @@ Parar compartilhamento → remove track → renegocia
 
 Nunca passa pelo WebSocket. Áudio do sistema junto com a tela: *nice-to-have* pós-MVP (suporte varia por SO).
 
+**Implementado (lado servidor)**: `screen_share:start`/`screen_share:stop` no
+mesmo `VoiceChannel`, com metadata `screen_sharing` no Presence. Diferente
+do cap de vídeo (até 4 ao mesmo tempo), é um recurso exclusivo — só um
+compartilhamento por sala. `screen_share:start` responde
+`{:error, %{reason: "screen_share_in_use"}}` se outra pessoa já está
+compartilhando; é idempotente para quem já é o compartilhador atual; parar
+libera a sala para qualquer outro membro. A parte client-side (captura de
+verdade, `desktopCapturer`, renegociação) segue dependendo do Electron —
+FASE 11.
+
 ## Fluxo do Go Live (pós-MVP, FASE 9)
 
 Mesh não escala para um-para-muitos — aqui um SFU é obrigatório.

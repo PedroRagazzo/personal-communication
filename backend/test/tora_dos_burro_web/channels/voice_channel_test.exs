@@ -230,4 +230,83 @@ defmodule ToraDosBurroWeb.VoiceChannelTest do
       assert_reply ref, :ok
     end
   end
+
+  describe "compartilhamento de tela (FASE 8)" do
+    test "primeiro a compartilhar consegue, e aparece na presença", %{
+      owner: owner,
+      other: other,
+      voice_channel: channel
+    } do
+      owner_id = owner.id
+
+      owner_socket = connect_as(owner)
+      {:ok, _, owner_voice} = subscribe_and_join(owner_socket, "voice:#{channel.id}", %{})
+
+      other_socket = connect_as(other)
+      {:ok, _, _other_voice} = subscribe_and_join(other_socket, "voice:#{channel.id}", %{})
+
+      ref = push(owner_voice, "screen_share:start", %{})
+      assert_reply ref, :ok
+
+      assert_broadcast "presence_diff",
+                       %{joins: %{^owner_id => %{metas: [%{screen_sharing: true}]}}}
+    end
+
+    test "segunda pessoa não consegue compartilhar enquanto a primeira ainda está", %{
+      owner: owner,
+      other: other,
+      voice_channel: channel
+    } do
+      owner_socket = connect_as(owner)
+      {:ok, _, owner_voice} = subscribe_and_join(owner_socket, "voice:#{channel.id}", %{})
+
+      other_socket = connect_as(other)
+      {:ok, _, other_voice} = subscribe_and_join(other_socket, "voice:#{channel.id}", %{})
+
+      ref = push(owner_voice, "screen_share:start", %{})
+      assert_reply ref, :ok
+
+      ref2 = push(other_voice, "screen_share:start", %{})
+      assert_reply ref2, :error, %{reason: "screen_share_in_use"}
+    end
+
+    test "reenviar screen_share:start pra quem já está compartilhando é idempotente", %{
+      owner: owner,
+      other: other,
+      voice_channel: channel
+    } do
+      owner_socket = connect_as(owner)
+      {:ok, _, owner_voice} = subscribe_and_join(owner_socket, "voice:#{channel.id}", %{})
+
+      other_socket = connect_as(other)
+      {:ok, _, _other_voice} = subscribe_and_join(other_socket, "voice:#{channel.id}", %{})
+
+      ref = push(owner_voice, "screen_share:start", %{})
+      assert_reply ref, :ok
+
+      ref2 = push(owner_voice, "screen_share:start", %{})
+      assert_reply ref2, :ok
+    end
+
+    test "parar libera para outra pessoa compartilhar", %{
+      owner: owner,
+      other: other,
+      voice_channel: channel
+    } do
+      owner_socket = connect_as(owner)
+      {:ok, _, owner_voice} = subscribe_and_join(owner_socket, "voice:#{channel.id}", %{})
+
+      other_socket = connect_as(other)
+      {:ok, _, other_voice} = subscribe_and_join(other_socket, "voice:#{channel.id}", %{})
+
+      ref = push(owner_voice, "screen_share:start", %{})
+      assert_reply ref, :ok
+
+      ref2 = push(owner_voice, "screen_share:stop", %{})
+      assert_reply ref2, :ok
+
+      ref3 = push(other_voice, "screen_share:start", %{})
+      assert_reply ref3, :ok
+    end
+  end
 end
