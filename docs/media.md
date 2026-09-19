@@ -72,11 +72,25 @@ por enquanto — coturn (TURN) já está no `docker-compose.yml` mas não dá
 pra testar aqui (sem Docker, mesma limitação de sempre); falta ligar o
 cliente nele quando o ambiente permitir.
 
-**Ainda não implementado (voz)**: deafen (só mute por enquanto), indicador
-persistente de "conectado à voz" visível fora do canal selecionado
-(hoje sair da visão do canal esconde os controles, mas a chamada continua
-ativa em segundo plano — comportamento correto, só falta a UI pra
-mostrar isso de qualquer lugar do app).
+**Deafen implementado** (logo após a revisão do cap de tela, `v0.15.2`):
+backend não mudou — `state:update` já aceitava `deafened` desde a FASE 6,
+só nunca era usado pelo cliente. `voiceStore.ts` ganhou `localDeafened` +
+`toggleDeafen()`; `VoicePanel.tsx` passa `localDeafened` como `muted` pros
+elementos `<audio>` remotos (silencia só a reprodução local, não afeta o
+que a pessoa ensurdecida transmite pros outros). Interlock deliberado,
+igual ao Discord: ensurdecer força mute junto (falar sem conseguir ouvir a
+resposta não faz sentido); desmutar enquanto ensurdecido também
+desensurdece (senão a pessoa voltaria a falar sem perceber que ainda
+estava sem ouvir nada); desensurdecer sozinho **não** desmuta — precisa de
+uma ação separada. Verificado ao vivo (Electron real via CDP + peer
+independente): as duas transições, presença refletindo `muted`/`deafened`
+corretamente no outro peer, sem erros.
+
+**Ainda não implementado (voz)**: indicador persistente de "conectado à
+voz" visível fora do canal selecionado (hoje sair da visão do canal
+esconde os controles, mas a chamada continua ativa em segundo plano —
+comportamento correto, só falta a UI pra mostrar isso de qualquer lugar
+do app).
 
 **Bug real encontrado e corrigido na fatia 5, afeta desde a fatia 1**: o
 preload (`desktop/src/preload/`) nunca carregava de verdade dentro do

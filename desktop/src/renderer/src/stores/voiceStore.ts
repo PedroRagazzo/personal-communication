@@ -22,6 +22,7 @@ interface VoiceState {
   channelId: string | null
   participants: VoiceParticipant[]
   localMuted: boolean
+  localDeafened: boolean
   remoteAudioStreams: Record<string, MediaStream>
   screenSharing: boolean
   localScreenStream: MediaStream | null
@@ -33,6 +34,7 @@ interface VoiceState {
   join: (channelId: string, currentUserId: string) => Promise<void>
   leave: () => void
   toggleMute: () => void
+  toggleDeafen: () => void
   startScreenShare: (sourceId: string) => Promise<void>
   stopScreenShare: () => void
   toggleVideo: () => Promise<void>
@@ -46,6 +48,7 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
   channelId: null,
   participants: [],
   localMuted: false,
+  localDeafened: false,
   remoteAudioStreams: {},
   screenSharing: false,
   localScreenStream: null,
@@ -225,6 +228,7 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
       participants: [],
       remoteAudioStreams: {},
       localMuted: false,
+      localDeafened: false,
       screenSharing: false,
       localScreenStream: null,
       remoteScreenStreams: {},
@@ -235,13 +239,26 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
   },
 
   toggleMute: () => {
-    const muted = !get().localMuted
+    const wasMuted = get().localMuted
+    const muted = !wasMuted
+    // Desmutar enquanto ensurdecido também desensurdece — igual ao
+    // Discord: ficar sem ouvir nada mas falando de novo seria um estado
+    // confuso de deixar acontecer silenciosamente.
+    const deafened = muted ? get().localDeafened : false
     mesh?.setMuted(muted)
-    // O handler `state:update` no backend sempre espera os dois campos
-    // juntos (usa default false pra quem faltar) — deafen ainda não existe
-    // no cliente, então sempre manda false.
-    phoenixChannel?.push('state:update', { muted, deafened: false })
-    set({ localMuted: muted })
+    phoenixChannel?.push('state:update', { muted, deafened })
+    set({ localMuted: muted, localDeafened: deafened })
+  },
+
+  toggleDeafen: () => {
+    const deafened = !get().localDeafened
+    // Ensurdecer força mute junto (não faz sentido continuar transmitindo
+    // sem conseguir ouvir a resposta); desensurdecer não desmuta sozinho —
+    // precisa de uma ação separada, pra nunca voltar a falar sem querer.
+    const muted = deafened ? true : get().localMuted
+    mesh?.setMuted(muted)
+    phoenixChannel?.push('state:update', { muted, deafened })
+    set({ localDeafened: deafened, localMuted: muted })
   },
 
   startScreenShare: async (sourceId) => {

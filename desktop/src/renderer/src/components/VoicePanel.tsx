@@ -25,6 +25,7 @@ export function VoicePanel({
   const activeChannelId = useVoiceStore((s) => s.channelId)
   const participants = useVoiceStore((s) => s.participants)
   const localMuted = useVoiceStore((s) => s.localMuted)
+  const localDeafened = useVoiceStore((s) => s.localDeafened)
   const remoteAudioStreams = useVoiceStore((s) => s.remoteAudioStreams)
   const screenSharing = useVoiceStore((s) => s.screenSharing)
   const localScreenStream = useVoiceStore((s) => s.localScreenStream)
@@ -36,6 +37,7 @@ export function VoicePanel({
   const join = useVoiceStore((s) => s.join)
   const leave = useVoiceStore((s) => s.leave)
   const toggleMute = useVoiceStore((s) => s.toggleMute)
+  const toggleDeafen = useVoiceStore((s) => s.toggleDeafen)
   const startScreenShare = useVoiceStore((s) => s.startScreenShare)
   const stopScreenShare = useVoiceStore((s) => s.stopScreenShare)
   const toggleVideo = useVoiceStore((s) => s.toggleVideo)
@@ -82,6 +84,7 @@ export function VoicePanel({
                 <span className="flex items-center gap-1 text-neutral-500">
                   {p.screen_sharing && <span title="Compartilhando tela">🖥️</span>}
                   {(p.userId === currentUserId ? videoEnabled : p.video) && <span title="Câmera ligada">🎥</span>}
+                  {(p.userId === currentUserId ? localDeafened : p.deafened) && <span title="Ensurdecido">🙉</span>}
                   {(p.userId === currentUserId ? localMuted : p.muted) ? '🔇' : '🎙️'}
                 </span>
               </li>
@@ -94,6 +97,14 @@ export function VoicePanel({
               className="rounded bg-neutral-800 px-4 py-2 text-sm transition hover:bg-neutral-700"
             >
               {localMuted ? 'Ativar microfone' : 'Mutar'}
+            </button>
+            <button
+              onClick={toggleDeafen}
+              className={`rounded px-4 py-2 text-sm transition ${
+                localDeafened ? 'bg-red-900 hover:bg-red-800' : 'bg-neutral-800 hover:bg-neutral-700'
+              }`}
+            >
+              {localDeafened ? 'Parar de ensurdecer' : 'Ensurdecer'}
             </button>
             <button
               onClick={() => toggleVideo()}
@@ -137,7 +148,7 @@ export function VoicePanel({
           ))}
 
           {Object.entries(remoteAudioStreams).map(([peerId, stream]) => (
-            <RemoteAudio key={peerId} stream={stream} />
+            <RemoteAudio key={peerId} stream={stream} muted={localDeafened} />
           ))}
         </>
       )}
@@ -155,14 +166,14 @@ export function VoicePanel({
   )
 }
 
-function RemoteAudio({ stream }: { stream: MediaStream }) {
+function RemoteAudio({ stream, muted }: { stream: MediaStream; muted?: boolean }) {
   const ref = useRef<HTMLAudioElement>(null)
 
   useEffect(() => {
     if (ref.current) ref.current.srcObject = stream
   }, [stream])
 
-  return <audio ref={ref} autoPlay />
+  return <audio ref={ref} autoPlay muted={muted} />
 }
 
 function RemoteVideo({ stream, label, muted }: { stream: MediaStream; label: string; muted?: boolean }) {
