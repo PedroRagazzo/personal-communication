@@ -4,9 +4,9 @@ Plataforma de comunicação em tempo real (estilo Discord): servidores/comunidad
 
 ## Status atual
 
-**FASE 0 — Arquitetura: concluída.** **FASE 1 — Backend básico: concluída.** **FASE 2 — Autenticação: concluída.** **FASE 3 — Usuários e servidores: concluída.** **FASE 4 — Chat em tempo real: núcleo concluído.** **FASE 5 — Categorias e permissões por canal: concluída** — `permission_overwrites` com a mesma resolução de permissão do Discord (overwrite de `@everyone` → cargo → membro específico), canais podem ficar "privados" sem precisar de uma flag dedicada. 54 testes passando, verificado ao vivo (categoria, canal privado, membro comum bloqueado, dono sempre com acesso).
+**FASE 0 — Arquitetura: concluída.** **FASE 1 — Backend básico: concluída.** **FASE 2 — Autenticação: concluída.** **FASE 3 — Usuários e servidores: concluída.** **FASE 4 — Chat em tempo real: núcleo concluído.** **FASE 5 — Categorias e permissões por canal: concluída.** **FASE 6 — Voz (sinalização): concluída** — `ToraDosBurroWeb.VoiceChannel` (tópico `voice:{channel_id}`) relay de SDP/ICE + `Phoenix.Presence` para quem está na sala e estado de mute/deafen. 61 testes passando, verificado ao vivo com cliente WebSocket real.
 
-Anexos leves (upload via MinIO) ficam pendentes — dependem do Docker/MinIO estarem rodando (ver `docker-compose.yml`), o que este ambiente ainda não tem. Confirmação de email e recuperação de senha ficam para uma fatia futura da FASE 2 (dependem de escolher um mailer).
+**O que a FASE 6 não cobre ainda, de propósito**: as peer connections WebRTC de verdade (perfect negotiation, STUN/coturn) são client-side e só chegam com o Electron na FASE 11 — até lá, o Phoenix só faz sinalização, nunca vê mídia. Anexos leves (upload via MinIO) ficam pendentes — dependem do Docker/MinIO estarem rodando (ver `docker-compose.yml`), o que este ambiente ainda não tem. Confirmação de email e recuperação de senha ficam para uma fatia futura da FASE 2 (dependem de escolher um mailer).
 
 Leia primeiro:
 
@@ -84,4 +84,4 @@ cmd /c '"C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Bu
 
 ## Próximos passos
 
-**FASE 6 — Voz** (mesh WebRTC, sinalização via Phoenix Channel, Presence). Anexos leves da FASE 4 continuam pendentes, precisando de `docker compose up -d` para verificar de ponta a ponta.
+**FASE 7 — Vídeo** (câmera, `MediaSession`, cap de 4 participantes com vídeo — mesma sinalização da FASE 6, só adiciona o tipo de track). Anexos leves da FASE 4 continuam pendentes, precisando de `docker compose up -d` para verificar de ponta a ponta.
