@@ -4,7 +4,9 @@ Plataforma de comunicação em tempo real (estilo Discord): servidores/comunidad
 
 ## Status atual
 
-**FASE 0 — Arquitetura: concluída.** **FASE 1 — Backend básico: concluída e verificada** — `mix phx.server` sobe, `GET /api/v1/health` responde `200 {"status":"ok"}`, `mix test` passa (3/3).
+**FASE 0 — Arquitetura: concluída.** **FASE 1 — Backend básico: concluída.** **FASE 2 — Autenticação: concluída** — cadastro, login, JWT (Guardian + guardian_db, argon2id), rota protegida de exemplo. 14 testes passando, fluxo completo verificado contra o servidor rodando de verdade.
+
+Confirmação de email e recuperação de senha ficam para uma fatia futura da FASE 2 (dependem de escolher um mailer).
 
 Leia primeiro:
 
@@ -73,4 +75,4 @@ mix test
 
 ## Próximos passos
 
-**FASE 2 — Autenticação** (registro, login, Guardian JWT, `guardian_db`, argon2id).
+**FASE 3 — Usuários e servidores** (servidores, membros, cargos/permissões, convites, banimento).
