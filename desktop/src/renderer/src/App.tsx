@@ -7,7 +7,9 @@ import { HomePage } from './pages/HomePage'
 export default function App() {
   const status = useAuthStore((s) => s.status)
   const bootstrap = useAuthStore((s) => s.bootstrap)
-  const [screen, setScreen] = useState<'login' | 'register'>('login')
+  // Cadastro é o fluxo padrão agora — login (username#discriminator) só é
+  // necessário se a sessão salva se perder (ver docs/security.md).
+  const [screen, setScreen] = useState<'login' | 'register'>('register')
 
   useEffect(() => {
     bootstrap()

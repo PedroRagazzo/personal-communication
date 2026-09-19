@@ -47,7 +47,7 @@ export interface AuthUser {
   id: string
   username: string
   discriminator: string
-  email: string
+  email: string | null
   display_name: string | null
 }
 
@@ -57,17 +57,22 @@ export interface AuthTokens {
   user: AuthUser
 }
 
-export function register(username: string, email: string, password: string): Promise<AuthTokens> {
+// Cadastro pede só usuário+senha — email é opcional no backend (guardado
+// pra uma fatia futura de confirmação/recuperação de senha) mas o cliente
+// nunca pede/mostra isso.
+export function register(username: string, password: string): Promise<AuthTokens> {
   return request('/auth/register', {
     method: 'POST',
-    body: JSON.stringify({ user: { username, email, password } })
+    body: JSON.stringify({ user: { username, password } })
   })
 }
 
-export function login(email: string, password: string): Promise<AuthTokens> {
+// Login usa username#discriminator, não email — é o caminho raro de
+// recriar a sessão (o normal é a sessão persistir via secureStorage).
+export function login(username: string, discriminator: string, password: string): Promise<AuthTokens> {
   return request('/auth/login', {
     method: 'POST',
-    body: JSON.stringify({ email, password })
+    body: JSON.stringify({ username, discriminator, password })
   })
 }
 

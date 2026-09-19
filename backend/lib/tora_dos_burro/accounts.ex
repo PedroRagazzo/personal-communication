@@ -21,6 +21,11 @@ defmodule ToraDosBurro.Accounts do
     Repo.get_by(User, email: email)
   end
 
+  def get_user_by_username_and_discriminator(username, discriminator)
+      when is_binary(username) and is_binary(discriminator) do
+    Repo.get_by(User, username: username, discriminator: discriminator)
+  end
+
   @max_discriminator_attempts 20
 
   @doc """
@@ -65,13 +70,14 @@ defmodule ToraDosBurro.Accounts do
   end
 
   @doc """
-  Autentica por email/senha.
+  Autentica por `username#discriminator` + senha — não por email (o cliente
+  não pede/guarda email do usuário; ver docs/security.md).
 
   Roda o hash mesmo quando o usuário não existe (`Argon2.no_user_verify/0`)
-  para não vazar, por tempo de resposta, quais emails estão cadastrados.
+  para não vazar, por tempo de resposta, quais contas existem.
   """
-  def authenticate_user(email, password) do
-    user = get_user_by_email(email)
+  def authenticate_user(username, discriminator, password) do
+    user = get_user_by_username_and_discriminator(username, discriminator)
 
     cond do
       user && Argon2.verify_pass(password, user.password_hash) ->

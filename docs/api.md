@@ -12,15 +12,16 @@ GET /api/v1/health → { "status": "ok" }
 
 ## FASE 2 — Autenticação
 
+Implementado. `email` é **opcional** no cadastro (o cliente hoje só pede usuário+senha — sessão persistida localmente via `safeStorage` cobre o dia a dia; login é o caminho de recuperação, e por isso usa `username#discriminator`, não email, já que o cliente nunca chega a pedir/guardar isso). O campo continua existindo no schema para uma fatia futura de confirmação/recuperação de senha por email.
+
 ```
-POST /api/v1/auth/register
-POST /api/v1/auth/login
-POST /api/v1/auth/refresh
-POST /api/v1/auth/logout
-POST /api/v1/auth/password/forgot
-POST /api/v1/auth/password/reset
-GET  /api/v1/auth/confirm/:token
+POST /api/v1/auth/register   body: { user: { username, password, email? } }
+POST /api/v1/auth/login      body: { username, discriminator, password }
+POST /api/v1/auth/refresh    body: { refresh_token }
+POST /api/v1/auth/logout     body: { refresh_token }
 ```
+
+`password/forgot`, `password/reset` e `confirm/:token` do documento original ficam para quando confirmação de email/recuperação de senha entrarem (ver `docs/roadmap.md`) — não implementados.
 
 ## FASE 2–3 — Usuários
 

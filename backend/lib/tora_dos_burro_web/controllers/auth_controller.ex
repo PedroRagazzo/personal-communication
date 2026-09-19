@@ -14,8 +14,12 @@ defmodule ToraDosBurroWeb.AuthController do
     end
   end
 
-  def login(conn, %{"email" => email, "password" => password}) do
-    with {:ok, user} <- Accounts.authenticate_user(email, password) do
+  def login(conn, %{
+        "username" => username,
+        "discriminator" => discriminator,
+        "password" => password
+      }) do
+    with {:ok, user} <- Accounts.authenticate_user(username, discriminator, password) do
       render(conn, :tokens, tokens(user))
     end
   end

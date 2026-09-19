@@ -13,8 +13,8 @@ interface AuthState {
   accessToken: string | null
   error: string | null
   bootstrap: () => Promise<void>
-  register: (username: string, email: string, password: string) => Promise<void>
-  login: (email: string, password: string) => Promise<void>
+  register: (username: string, password: string) => Promise<void>
+  login: (username: string, discriminator: string, password: string) => Promise<void>
   logout: () => Promise<void>
 }
 
@@ -65,10 +65,10 @@ export const useAuthStore = create<AuthState>((set) => ({
     }
   },
 
-  register: async (username, email, password) => {
+  register: async (username, password) => {
     set({ error: null })
     try {
-      const tokens = await api.register(username, email, password)
+      const tokens = await api.register(username, password)
       await persistAndSetAuthenticated(tokens)
     } catch (err) {
       set({ error: err instanceof Error ? err.message : 'erro desconhecido' })
@@ -76,10 +76,10 @@ export const useAuthStore = create<AuthState>((set) => ({
     }
   },
 
-  login: async (email, password) => {
+  login: async (username, discriminator, password) => {
     set({ error: null })
     try {
-      const tokens = await api.login(email, password)
+      const tokens = await api.login(username, discriminator, password)
       await persistAndSetAuthenticated(tokens)
     } catch (err) {
       set({ error: err instanceof Error ? err.message : 'erro desconhecido' })

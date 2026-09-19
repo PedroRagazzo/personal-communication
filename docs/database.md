@@ -17,7 +17,7 @@ Banco: PostgreSQL via Ecto. Este é o modelo inicial (FASE 0); migrations reais 
 
 | Entidade | Campos-chave | Observação |
 |---|---|---|
-| `users` | id, username, discriminator, email, password_hash, display_name, avatar_url, status, custom_status_text, last_seen_at | perfil embutido no `User` no MVP (bio, banner) — sem `UserProfile` separada a menos que justifique |
+| `users` | id, username, discriminator, **email (opcional)**, password_hash, display_name, avatar_url, status, custom_status_text, last_seen_at | perfil embutido no `User` no MVP (bio, banner) — sem `UserProfile` separada a menos que justifique. `email` é `null: true` desde a FASE 11 (migration `make_user_email_optional`) — o cliente não pede/guarda email, login usa `username#discriminator`; o campo continua existindo para uma fatia futura de confirmação/recuperação de senha |
 | `guardian_tokens` | (tabela gerenciada pela lib `guardian_db`) | necessária para revogar/rotacionar refresh tokens — Guardian sozinho é stateless |
 | `servers` | id, name, owner_id, icon_url | "guild" no vocabulário Discord |
 | `server_members` | id, server_id, user_id, nickname, joined_at | |

@@ -64,7 +64,7 @@ See `backend/AGENTS.md` for generic Phoenix/Elixir/Ecto/Mix conventions (prefer 
 
 ### Contexts (`backend/lib/tora_dos_burro/`)
 
-- `Accounts` — registration/auth. Usernames are **not** globally unique alone: identity is Discord-style `username#discriminator`, with a unique index on the pair and randomized-with-retry discriminator assignment on collision (`insert_with_discriminator/2` in `accounts.ex`).
+- `Accounts` — registration/auth. Usernames are **not** globally unique alone: identity is Discord-style `username#discriminator`, with a unique index on the pair and randomized-with-retry discriminator assignment on collision (`insert_with_discriminator/2` in `accounts.ex`). `email` is optional (`null: true`, migration `make_user_email_optional`) — the client only collects username+password; `POST /auth/login` takes `{username, discriminator, password}`, not email, since the client never has an email to send. Login is the rare recovery path, not the normal flow — the desktop client persists the session locally (`safeStorage`) so it doesn't ask again day to day.
 - `Guardian` — JWT (access + refresh), backed by `guardian_db` for revocation/rotation (plain Guardian is stateless and can't revoke on its own).
 - `Servers` — servers, members, roles, invites, bans; owns `effective_permissions/2` (server-level) and `authorize/3`.
 - `Servers.Permissions` — the permission bitfield (`view_channels`, `send_messages`, `manage_roles`, `administrator`, etc. — see the module for the full flag list and hex values).

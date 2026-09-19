@@ -5,12 +5,11 @@ defmodule ToraDosBurroWeb.AuthControllerTest do
 
   @user_attrs %{
     "username" => "pedro",
-    "email" => "pedro@example.com",
     "password" => "senha-super-segura"
   }
 
   describe "POST /api/v1/auth/register" do
-    test "cria o usuário e devolve tokens", %{conn: conn} do
+    test "cria o usuário (sem email) e devolve tokens", %{conn: conn} do
       conn = post(conn, ~p"/api/v1/auth/register", user: @user_attrs)
 
       assert %{
@@ -18,7 +17,7 @@ defmodule ToraDosBurroWeb.AuthControllerTest do
                "refresh_token" => refresh_token,
                "user" => %{
                  "username" => "pedro",
-                 "email" => "pedro@example.com",
+                 "email" => nil,
                  "discriminator" => discriminator
                }
              } = json_response(conn, 201)
@@ -40,18 +39,25 @@ defmodule ToraDosBurroWeb.AuthControllerTest do
       %{user: user}
     end
 
-    test "autentica com credenciais corretas", %{conn: conn} do
+    test "autentica com username, discriminator e senha corretos", %{conn: conn, user: user} do
       conn =
         post(conn, ~p"/api/v1/auth/login",
-          email: "pedro@example.com",
+          username: user.username,
+          discriminator: user.discriminator,
           password: "senha-super-segura"
         )
 
       assert %{"access_token" => _, "refresh_token" => _} = json_response(conn, 200)
     end
 
-    test "rejeita senha errada", %{conn: conn} do
-      conn = post(conn, ~p"/api/v1/auth/login", email: "pedro@example.com", password: "errada")
+    test "rejeita senha errada", %{conn: conn, user: user} do
+      conn =
+        post(conn, ~p"/api/v1/auth/login",
+          username: user.username,
+          discriminator: user.discriminator,
+          password: "errada"
+        )
+
       assert json_response(conn, 401)
     end
   end

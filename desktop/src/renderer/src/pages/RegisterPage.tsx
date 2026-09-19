@@ -5,7 +5,6 @@ export function RegisterPage({ onSwitchToLogin }: { onSwitchToLogin: () => void 
   const register = useAuthStore((s) => s.register)
   const error = useAuthStore((s) => s.error)
   const [username, setUsername] = useState('')
-  const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [submitting, setSubmitting] = useState(false)
 
@@ -13,7 +12,7 @@ export function RegisterPage({ onSwitchToLogin }: { onSwitchToLogin: () => void 
     e.preventDefault()
     setSubmitting(true)
     try {
-      await register(username, email, password)
+      await register(username, password)
     } catch {
       // erro já fica em `error`, exibido abaixo
     } finally {
@@ -27,7 +26,10 @@ export function RegisterPage({ onSwitchToLogin }: { onSwitchToLogin: () => void 
         <div>
           <h1 className="text-lg font-semibold text-neutral-100">Criar conta</h1>
           <p className="text-xs text-neutral-500">
-            O discriminator (<span className="font-mono">#0001</span>) é atribuído automaticamente.
+            Sua sessão fica salva neste dispositivo — você não vai precisar entrar de novo. O
+            discriminator (<span className="font-mono">#0001</span>) é atribuído automaticamente;
+            guarde o nome completo (ex.: <span className="font-mono">voce#0001</span>) caso precise
+            entrar de novo manualmente algum dia.
           </p>
         </div>
 
@@ -46,20 +48,6 @@ export function RegisterPage({ onSwitchToLogin }: { onSwitchToLogin: () => void 
             maxLength={32}
             value={username}
             onChange={(e) => setUsername(e.target.value)}
-            className="w-full rounded bg-neutral-700 px-3 py-2 text-neutral-100 outline-none focus:ring-2 focus:ring-indigo-500"
-          />
-        </div>
-
-        <div className="space-y-1">
-          <label className="text-xs text-neutral-400" htmlFor="register-email">
-            Email
-          </label>
-          <input
-            id="register-email"
-            type="email"
-            required
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
             className="w-full rounded bg-neutral-700 px-3 py-2 text-neutral-100 outline-none focus:ring-2 focus:ring-indigo-500"
           />
         </div>
@@ -93,7 +81,7 @@ export function RegisterPage({ onSwitchToLogin }: { onSwitchToLogin: () => void 
           onClick={onSwitchToLogin}
           className="w-full text-center text-xs text-neutral-400 hover:text-neutral-200"
         >
-          Já tem conta? Entrar
+          Já tem conta e perdeu a sessão? Entrar
         </button>
       </form>
     </div>

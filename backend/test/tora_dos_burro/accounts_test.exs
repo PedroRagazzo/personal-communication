@@ -9,6 +9,11 @@ defmodule ToraDosBurro.AccountsTest do
     "password" => "senha-super-segura"
   }
 
+  @no_email_attrs %{
+    "username" => "pedro",
+    "password" => "senha-super-segura"
+  }
+
   describe "register_user/1" do
     test "cria o usuário com senha hasheada e discriminator atribuído quando os dados são válidos" do
       assert {:ok, user} = Accounts.register_user(@valid_attrs)
@@ -19,17 +24,22 @@ defmodule ToraDosBurro.AccountsTest do
       assert user.discriminator =~ ~r/^\d{4}$/
     end
 
-    test "permite o mesmo username com discriminators diferentes" do
-      assert {:ok, user1} = Accounts.register_user(@valid_attrs)
+    test "cria o usuário sem email — hoje só usuário+senha é obrigatório" do
+      assert {:ok, user} = Accounts.register_user(@no_email_attrs)
+      assert user.username == "pedro"
+      assert user.email == nil
+      assert user.discriminator =~ ~r/^\d{4}$/
+    end
 
-      assert {:ok, user2} =
-               Accounts.register_user(%{@valid_attrs | "email" => "outro@example.com"})
+    test "permite o mesmo username com discriminators diferentes" do
+      assert {:ok, user1} = Accounts.register_user(@no_email_attrs)
+      assert {:ok, user2} = Accounts.register_user(@no_email_attrs)
 
       assert user1.username == user2.username
       assert user1.discriminator != user2.discriminator
     end
 
-    test "rejeita email duplicado" do
+    test "rejeita email duplicado quando informado" do
       assert {:ok, _user} = Accounts.register_user(@valid_attrs)
 
       assert {:error, changeset} =
@@ -40,30 +50,44 @@ defmodule ToraDosBurro.AccountsTest do
 
     test "rejeita senha curta" do
       assert {:error, changeset} =
-               Accounts.register_user(%{@valid_attrs | "password" => "curta"})
+               Accounts.register_user(%{@no_email_attrs | "password" => "curta"})
 
       assert "should be at least 8 character(s)" in errors_on(changeset).password
     end
   end
 
-  describe "authenticate_user/2" do
+  describe "authenticate_user/3" do
     setup do
-      {:ok, user} = Accounts.register_user(@valid_attrs)
+      {:ok, user} = Accounts.register_user(@no_email_attrs)
       %{user: user}
     end
 
-    test "autentica com email e senha corretos", %{user: user} do
-      assert {:ok, authenticated} = Accounts.authenticate_user(user.email, "senha-super-segura")
+    test "autentica com username, discriminator e senha corretos", %{user: user} do
+      assert {:ok, authenticated} =
+               Accounts.authenticate_user(user.username, user.discriminator, "senha-super-segura")
+
       assert authenticated.id == user.id
     end
 
     test "rejeita senha errada", %{user: user} do
-      assert {:error, :unauthorized} = Accounts.authenticate_user(user.email, "senha-errada")
+      assert {:error, :unauthorized} =
+               Accounts.authenticate_user(user.username, user.discriminator, "senha-errada")
     end
 
-    test "rejeita email inexistente" do
+    test "rejeita discriminator errado", %{user: user} do
+      outro_discriminator = if user.discriminator == "0001", do: "0002", else: "0001"
+
       assert {:error, :unauthorized} =
-               Accounts.authenticate_user("ninguem@example.com", "qualquer-senha")
+               Accounts.authenticate_user(
+                 user.username,
+                 outro_discriminator,
+                 "senha-super-segura"
+               )
+    end
+
+    test "rejeita conta inexistente" do
+      assert {:error, :unauthorized} =
+               Accounts.authenticate_user("ninguem", "0001", "qualquer-senha")
     end
   end
 end
