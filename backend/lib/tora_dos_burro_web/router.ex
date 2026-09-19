@@ -18,12 +18,40 @@ defmodule ToraDosBurroWeb.Router do
     post "/auth/login", AuthController, :login
     post "/auth/refresh", AuthController, :refresh
     post "/auth/logout", AuthController, :logout
+
+    # Preview público de convite — não exige login nem ser membro.
+    get "/invites/:code", InviteController, :show
   end
 
   scope "/api/v1", ToraDosBurroWeb do
     pipe_through [:api, :auth]
 
     get "/users/me", UserController, :me
+
+    post "/servers", ServerController, :create
+    get "/servers/:id", ServerController, :show
+    patch "/servers/:id", ServerController, :update
+    delete "/servers/:id", ServerController, :delete
+    post "/servers/:server_id/leave", ServerController, :leave
+
+    get "/servers/:server_id/members", ServerMemberController, :index
+    delete "/servers/:server_id/members/:user_id", ServerMemberController, :delete
+    put "/servers/:server_id/members/:user_id/roles/:role_id", ServerMemberController, :add_role
+
+    delete "/servers/:server_id/members/:user_id/roles/:role_id",
+           ServerMemberController,
+           :remove_role
+
+    get "/servers/:server_id/roles", RoleController, :index
+    post "/servers/:server_id/roles", RoleController, :create
+    patch "/servers/:server_id/roles/:id", RoleController, :update
+    delete "/servers/:server_id/roles/:id", RoleController, :delete
+
+    post "/servers/:server_id/invites", InviteController, :create
+    post "/invites/:code/join", InviteController, :join
+
+    post "/servers/:server_id/bans", BanController, :create
+    delete "/servers/:server_id/bans/:user_id", BanController, :delete
   end
 
   # Enable LiveDashboard in development

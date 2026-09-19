@@ -32,6 +32,11 @@ GET   /api/v1/users/:id
 
 ## FASE 3 — Servidores, membros, cargos, convites
 
+Implementado. Ajustes em relação ao rascunho original: atribuir/remover cargo
+virou dois verbos idempotentes (`PUT`/`DELETE` num sub-recurso `roles/:role_id`)
+em vez de um único `PUT` substituindo a lista inteira; `POST .../bans` recebe
+`user_id` no corpo (não há sub-recurso de usuário alvo antes do ban existir).
+
 ```
 POST   /api/v1/servers
 GET    /api/v1/servers/:id
@@ -39,22 +44,32 @@ PATCH  /api/v1/servers/:id
 DELETE /api/v1/servers/:id
 POST   /api/v1/servers/:id/leave
 
-GET    /api/v1/servers/:id/members
-DELETE /api/v1/servers/:id/members/:user_id        (kick)
-PUT    /api/v1/servers/:id/members/:user_id/roles   (atribuir/remover cargos)
+GET    /api/v1/servers/:server_id/members
+DELETE /api/v1/servers/:server_id/members/:user_id                    (kick)
+PUT    /api/v1/servers/:server_id/members/:user_id/roles/:role_id     (atribuir cargo)
+DELETE /api/v1/servers/:server_id/members/:user_id/roles/:role_id     (remover cargo)
 
-POST   /api/v1/servers/:id/bans
-DELETE /api/v1/servers/:id/bans/:user_id
+POST   /api/v1/servers/:server_id/bans        (body: user_id, reason)
+DELETE /api/v1/servers/:server_id/bans/:user_id
 
-GET    /api/v1/servers/:id/roles
-POST   /api/v1/servers/:id/roles
-PATCH  /api/v1/servers/:id/roles/:role_id
-DELETE /api/v1/servers/:id/roles/:role_id
+GET    /api/v1/servers/:server_id/roles
+POST   /api/v1/servers/:server_id/roles
+PATCH  /api/v1/servers/:server_id/roles/:id
+DELETE /api/v1/servers/:server_id/roles/:id
 
-POST   /api/v1/servers/:id/invites
-GET    /api/v1/invites/:code
+POST   /api/v1/servers/:server_id/invites
+GET    /api/v1/invites/:code           (público, não exige login nem ser membro)
 POST   /api/v1/invites/:code/join
 ```
+
+Permissões (bitfield em `roles.permissions`, ver `ToraDosBurro.Servers.Permissions`):
+`view_channels`, `send_messages`, `manage_messages`, `connect`, `speak`,
+`create_invite`, `kick_members`, `ban_members`, `manage_roles`,
+`manage_channels`, `manage_server`, `administrator`. Todo servidor ganha um
+cargo `@everyone` (`is_default: true`) na criação, com um subconjunto seguro
+por padrão; o dono do servidor sempre tem acesso total, independente de cargo.
+`permission_overwrites` (exceção por canal) fica para a FASE 5, quando canais
+existirem de verdade.
 
 ## FASE 4 — Mensagens e anexos
 

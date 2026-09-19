@@ -10,6 +10,13 @@ defmodule ToraDosBurro.Accounts do
     Repo.get(User, id)
   end
 
+  def fetch_user(id) do
+    case get_user(id) do
+      nil -> {:error, :not_found}
+      user -> {:ok, user}
+    end
+  end
+
   def get_user_by_email(email) when is_binary(email) do
     Repo.get_by(User, email: email)
   end
