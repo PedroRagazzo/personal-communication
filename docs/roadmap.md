@@ -3,16 +3,16 @@
 Regra fundamental: **não avançar para uma fase sem verificar se a anterior está funcional.** Cada fase é uma resposta explicando objetivo/arquivos/arquitetura/dependências/fluxo de dados **antes** de implementar (ver processo de desenvolvimento abaixo).
 
 ```
-FASE 0  → Arquitetura                        [CONCLUÍDA — este documento e os demais em docs/]
-FASE 1  → Backend básico (Phoenix, health check)
-FASE 2  → Autenticação (Guardian, argon2id, guardian_db)
-FASE 3  → Usuários e servidores (roles, permissões, convites, bans)
-FASE 4  → Chat em tempo real (+ anexos leves — ver nota abaixo)
-FASE 5  → Canais (texto/voz, categorias, ordenação)
-FASE 6  → Voz (mesh WebRTC, sinalização, Presence)
-FASE 7  → Vídeo (câmera, MediaSession, cap de 4 participantes)
-FASE 8  → Compartilhamento de tela (desktopCapturer, 1 por vez)
-──────────────────────────────────────────── fim do MVP ────
+FASE 0  → Arquitetura                        [CONCLUÍDA]
+FASE 1  → Backend básico (Phoenix, health check)                        [CONCLUÍDA — v0.1.0]
+FASE 2  → Autenticação (Guardian, argon2id, guardian_db)                [CONCLUÍDA — v0.2.0]
+FASE 3  → Usuários e servidores (roles, permissões, convites, bans)     [CONCLUÍDA — v0.3.0]
+FASE 4  → Chat em tempo real (núcleo — anexos leves pendentes)          [NÚCLEO CONCLUÍDO — v0.4.0-core]
+FASE 5  → Canais (categorias, permissões por canal)                    [CONCLUÍDA — v0.5.0]
+FASE 6  → Voz (mesh WebRTC, sinalização, Presence)                     [CONCLUÍDA — v0.6.0]
+FASE 7  → Vídeo (câmera, MediaSession, cap de 4 participantes)         [CONCLUÍDA — v0.7.0]
+FASE 8  → Compartilhamento de tela (desktopCapturer, 1 por vez)        [CONCLUÍDA — v0.8.0]
+──────────────────────────────────────────── fim do MVP (backend) ────
         → Amigos / Mensagens Diretas (fast-follow — schema já pronto na FASE 3/4)
 FASE 9  → Go Live (decisão de SFU em aberto — ver media.md)
 FASE 10 → Arquivos — gestão avançada (redefinida, ver nota abaixo)
@@ -25,6 +25,18 @@ FASE 16 → Segurança (hardening de produção, gestão de segredos, TLS real n
 FASE 17 → SDK (Rust primeiro, depois bindings)
 FASE 18 → Testes e produção
 ```
+
+**"MVP (backend)" concluído** com a FASE 8 (`v0.8.0`): 68 testes passando, cada
+fase verificada de ponta a ponta (incluindo com clientes WebSocket reais, não
+só a suíte automatizada). O qualificador "(backend)" importa — FASES 6, 7 e 8
+implementaram toda a sinalização/autorização/Presence do lado do servidor,
+mas a metade client-side (peer connections WebRTC de verdade, perfect
+negotiation, STUN/coturn, `desktopCapturer`) depende do Electron e só entra
+na FASE 11. Sem um cliente de verdade, ninguém liga microfone/câmera/tela
+ainda — só o "esqueleto" que torna isso possível está pronto.
+
+Pendente antes de um MVP completo de ponta a ponta: anexos leves (FASE 4,
+precisa de Docker/MinIO), Amigos/DM (fast-follow abaixo), e a FASE 11 em si.
 
 ## Correções registradas em relação ao documento original
 

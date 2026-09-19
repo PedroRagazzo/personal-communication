@@ -4,9 +4,23 @@ Plataforma de comunicação em tempo real (estilo Discord): servidores/comunidad
 
 ## Status atual
 
-**FASE 0 — Arquitetura: concluída.** **FASE 1 — Backend básico: concluída.** **FASE 2 — Autenticação: concluída.** **FASE 3 — Usuários e servidores: concluída.** **FASE 4 — Chat em tempo real: núcleo concluído.** **FASE 5 — Categorias e permissões por canal: concluída.** **FASE 6 — Voz (sinalização): concluída.** **FASE 7 — Vídeo: concluída** — `video:enable`/`video:disable` no mesmo `VoiceChannel`, cap de 4 participantes com vídeo por sala aplicado no servidor. 64 testes passando, verificado ao vivo.
+**MVP (backend) concluído — FASES 0 a 8, todas verificadas de ponta a ponta.** 68 testes passando (`cd backend && mix test`).
 
-**O que ainda não está coberto, de propósito**: as peer connections WebRTC de verdade (perfect negotiation, STUN/coturn) são client-side e só chegam com o Electron na FASE 11 — até lá, o Phoenix só faz sinalização, nunca vê mídia. Anexos leves (upload via MinIO) ficam pendentes — dependem do Docker/MinIO estarem rodando (ver `docker-compose.yml`), o que este ambiente ainda não tem. Confirmação de email e recuperação de senha ficam para uma fatia futura da FASE 2 (dependem de escolher um mailer).
+| Fase | O quê | Release |
+|---|---|---|
+| 0 | Arquitetura | — |
+| 1 | Backend básico (health check) | `v0.1.0` |
+| 2 | Autenticação (Guardian + guardian_db, argon2id) | `v0.2.0` |
+| 3 | Usuários e servidores (cargos, permissões, convites, bans) | `v0.3.0` |
+| 4 | Chat em tempo real (núcleo — anexos leves pendentes) | `v0.4.0-core` |
+| 5 | Categorias e permissões por canal (`permission_overwrites`) | `v0.5.0` |
+| 6 | Voz — sinalização (relay SDP/ICE + Presence) | `v0.6.0` |
+| 7 | Vídeo (cap de 4 participantes por sala) | `v0.7.0` |
+| 8 | Compartilhamento de tela (1 por sala) | `v0.8.0` |
+
+**O qualificador "(backend)" importa.** FASES 6–8 implementaram toda a sinalização/autorização/Presence do lado do servidor para voz, vídeo e tela — mas as peer connections WebRTC de verdade, perfect negotiation, STUN/coturn e `desktopCapturer` são client-side e só chegam com o Electron (FASE 11). Sem um cliente de verdade ainda, ninguém liga microfone/câmera/tela — só o "esqueleto" que torna isso possível está pronto e testado.
+
+**Pendente antes de um MVP completo de ponta a ponta**: anexos leves (FASE 4 — precisa de Docker/MinIO rodando), Amigos/DM (fast-follow fora do MVP formal, schema já pronto), e a própria FASE 11. Confirmação de email e recuperação de senha ficam para uma fatia futura da FASE 2 (dependem de escolher um mailer).
 
 Leia primeiro:
 
@@ -84,4 +98,10 @@ cmd /c '"C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Bu
 
 ## Próximos passos
 
-**FASE 8 — Compartilhamento de tela** (`desktopCapturer`, 1 compartilhamento ativo por vez por canal — mesma sinalização das FASES 6/7). Anexos leves da FASE 4 continuam pendentes, precisando de `docker compose up -d` para verificar de ponta a ponta.
+Fim do MVP (backend) — algumas direções possíveis, a decidir com quem está lendo isto:
+
+- **FASE 9 — Go Live** (decisão em aberto: mediasoup vs LiveKit, ver `docs/media.md`)
+- **FASE 11 — Cliente Electron** (é o que faz voz/vídeo/tela funcionarem de verdade, ligando no que já existe)
+- **Anexos leves** (fecha a FASE 4, precisa de `docker compose up -d`)
+- **Amigos/DM** (fast-follow, schema já pronto desde a FASE 3/4)
+- Ou seguir a ordem original: FASE 10 (arquivos, hardening), 12–18
