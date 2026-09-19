@@ -133,6 +133,75 @@ no servidor no momento de **habilitar** (não só no join do canal) —
 a sala já tem 4 com vídeo; reenviar `video:enable` para quem já está entre
 os 4 é idempotente (não conta em dobro contra o próprio limite).
 
+**Lado do cliente implementado (FASE 11, fatia 6)**: `voiceStore.toggleVideo()`
+reivindica o slot no servidor (`video:enable`) **antes** de ligar a câmera —
+ao contrário da tela, não existe nenhuma escolha de UI pra "desperdiçar" se a
+sala já estiver cheia, então falhar rápido é melhor do que piscar a câmera à
+toa; falha no `getUserMedia` depois de já ter reservado o slot manda
+`video:disable` pra liberar de volta. `MeshManager.setCameraTrack()`/
+`setScreenTrack()` usam criação **preguiçosa** de `RTCRtpSender` — só na
+primeira vez que a câmera/tela realmente liga é que `addTrack` (e portanto
+uma renegociação) acontece; toggles seguintes só trocam a track do sender já
+existente via `replaceTrack` (nunca `removeTrack`), sem renegociar de novo.
+Câmera e tela reaproveitam a mesma peer connection da voz — dá pra ter as
+duas ativas ao mesmo tempo pra uma mesma pessoa. Sem transceiver fixo por
+slot, a track de vídeo recebida não diz sozinha se é câmera ou tela — o
+peer que recebe desambigua usando o que o Presence já informa sobre quem
+mandou (`video`/`screen_sharing`), já que esse metadata sempre chega antes
+da track em si.
+
+**Dois bugs reais encontrados e corrigidos nesta fatia**, ambos só
+reproduzíveis com dois peers de verdade trocando várias tracks (nunca
+apareceram nos testes de fatia 4/5, que só exercitavam uma track de vídeo
+por vez):
+
+1. Pré-criar os dois transceivers de vídeo (câmera e tela) antecipadamente
+   no `addPeer`, antes de qualquer negociação — abordagem descartada.
+   Quebra quando há *glare* na negociação inicial (dois peers entrando
+   quase ao mesmo tempo, ambos ofertando ao mesmo tempo): o lado que perde
+   o glare faz rollback da própria oferta, e os transceivers que ele mesmo
+   pré-criou ficam órfãos (nunca chegam a ser negociados) — a renegociação
+   seguinte (ligar câmera/tela) tenta reaproveitá-los junto com os que
+   vieram da oferta do outro lado, resultando numa oferta com m-lines fora
+   de ordem (`InvalidAccessError: the order of m-lines... doesn't match`).
+   Resolvido com a criação preguiçosa descrita acima — só cria o sender
+   quando a câmera/tela liga de verdade, bem depois da negociação inicial
+   já estar estável.
+2. **Mais sutil**: `presence.onLeave` do lado do cliente derrubava e
+   recriava a peer connection inteira toda vez que QUALQUER peer da sala
+   mudava mute/deafen/vídeo/tela — não só quando alguém saía de verdade.
+   `Presence.update` (usado por essas quatro ações, ver `voice_channel.ex`)
+   manda um diff atômico de leave+join do mesmo par de metas, mas a
+   computação desse diff roda numa `Task` assíncrona
+   (`Phoenix.Presence.handle_diff/2`); sob rajada de updates próximos (ex.:
+   ligar câmera e, segundos depois, ligar tela) as tasks podem terminar
+   fora de ordem, fazendo o cliente enxergar um "leave" sem o join
+   correspondente ainda aplicado. Resultado: a peer connection era fechada
+   e recriada do zero no meio da chamada, perdendo todo o histórico de
+   negociação — a oferta seguinte não batia mais com o que o outro lado
+   já tinha negociado (mesmo sintoma de m-lines fora de ordem do bug 1,
+   causa raiz completamente diferente). Corrigido removendo esse gatilho:
+   `presence.onLeave` não derruba mais a peer connection — quem decide se
+   um peer realmente sumiu é o próprio WebRTC (`connectionstatechange` vira
+   `failed`/`closed`), não a semântica de diff do Presence. A lista de
+   participantes na UI continua atualizando na hora via `presence.onSync`
+   (inalterado); só a limpeza da conexão de mídia em si fica mais lenta
+   numa saída de verdade (segue o timeout normal de detecção de ICE, não
+   mais instantânea) — troca aceita conscientemente em troca de nunca mais
+   derrubar uma chamada ativa por um falso positivo.
+
+Verificado com dois clientes reais (Electron real via CDP + um segundo peer
+independente) trocando câmera sintética (canvas) e tela real/sintética nos
+dois sentidos, repetidas vezes, incluindo o cenário que expôs os dois bugs
+acima (áudio + câmera + tela simultâneos, trocando qual peer está
+compartilhando a tela várias vezes seguidas) — zero erros de negociação após
+as correções, streams sempre classificados corretamente (câmera vs tela) dos
+dois lados.
+
+**Ainda não implementado (vídeo)**: seleção de dispositivo/resolução/FPS
+(sempre pega o device default do SO por enquanto), indicador de cap
+atingido mais rico na UI (hoje só desabilita o botão com um `title`).
+
 ## Fluxo de compartilhamento de tela
 
 ```

@@ -3,14 +3,15 @@ import type { ChannelSummary, ServerMember } from '../services/api'
 import { useVoiceStore } from '../stores/voiceStore'
 import { ScreenSharePicker } from './ScreenSharePicker'
 
-// Voz (FASE 11, fatia 4) + compartilhamento de tela (fatia 5): conectar
-// entra no mesh WebRTC de verdade (mic real); compartilhar tela adiciona
-// uma track de vídeo às mesmas peer connections (não é um mesh separado).
-// A conexão vive em `voiceStore`, não neste componente — trocar de canal só
-// esconde os controles, não desconecta (mesmo comportamento do Discord:
-// sair da visão do canal de voz não te tira da chamada). Falta pra uma
-// próxima fatia: uma barra persistente mostrando "conectado em #x" visível
-// de qualquer lugar do app.
+// Voz (FASE 11, fatia 4) + compartilhamento de tela (fatia 5) + câmera
+// (fatia 6): conectar entra no mesh WebRTC de verdade (mic real); tela e
+// câmera adicionam tracks de vídeo às mesmas peer connections (não são
+// meshes separados, e podem estar ativas ao mesmo tempo). A conexão vive
+// em `voiceStore`, não neste componente — trocar de canal só esconde os
+// controles, não desconecta (mesmo comportamento do Discord: sair da
+// visão do canal de voz não te tira da chamada). Falta pra uma próxima
+// fatia: uma barra persistente mostrando "conectado em #x" visível de
+// qualquer lugar do app.
 export function VoicePanel({
   channel,
   currentUserId,
@@ -28,17 +29,24 @@ export function VoicePanel({
   const screenSharing = useVoiceStore((s) => s.screenSharing)
   const localScreenStream = useVoiceStore((s) => s.localScreenStream)
   const remoteScreenStreams = useVoiceStore((s) => s.remoteScreenStreams)
+  const videoEnabled = useVoiceStore((s) => s.videoEnabled)
+  const localCameraStream = useVoiceStore((s) => s.localCameraStream)
+  const remoteCameraStreams = useVoiceStore((s) => s.remoteCameraStreams)
   const error = useVoiceStore((s) => s.error)
   const join = useVoiceStore((s) => s.join)
   const leave = useVoiceStore((s) => s.leave)
   const toggleMute = useVoiceStore((s) => s.toggleMute)
   const startScreenShare = useVoiceStore((s) => s.startScreenShare)
   const stopScreenShare = useVoiceStore((s) => s.stopScreenShare)
+  const toggleVideo = useVoiceStore((s) => s.toggleVideo)
 
   const [showPicker, setShowPicker] = useState(false)
 
   const connectedHere = status === 'connected' && activeChannelId === channel.id
   const connectingHere = status === 'connecting' && activeChannelId === channel.id
+  // Só um hint de UI (evita ligar a câmera à toa pra ser rejeitado) — o
+  // servidor sempre reaplica o limite de verdade, nunca confia só nisso.
+  const videoCapReached = !videoEnabled && participants.filter((p) => p.video).length >= 4
 
   function participantName(userId: string): string {
     if (userId === currentUserId) return 'Você'
@@ -73,6 +81,7 @@ export function VoicePanel({
                 <span>{participantName(p.userId)}</span>
                 <span className="flex items-center gap-1 text-neutral-500">
                   {p.screen_sharing && <span title="Compartilhando tela">🖥️</span>}
+                  {(p.userId === currentUserId ? videoEnabled : p.video) && <span title="Câmera ligada">🎥</span>}
                   {(p.userId === currentUserId ? localMuted : p.muted) ? '🔇' : '🎙️'}
                 </span>
               </li>
@@ -85,6 +94,16 @@ export function VoicePanel({
               className="rounded bg-neutral-800 px-4 py-2 text-sm transition hover:bg-neutral-700"
             >
               {localMuted ? 'Ativar microfone' : 'Mutar'}
+            </button>
+            <button
+              onClick={() => toggleVideo()}
+              disabled={videoCapReached}
+              title={videoCapReached ? 'Limite de 4 participantes com vídeo atingido nessa sala' : undefined}
+              className={`rounded px-4 py-2 text-sm transition disabled:opacity-40 ${
+                videoEnabled ? 'bg-red-900 hover:bg-red-800' : 'bg-neutral-800 hover:bg-neutral-700'
+              }`}
+            >
+              {videoEnabled ? 'Desligar câmera' : 'Ligar câmera'}
             </button>
             <button
               onClick={() => (screenSharing ? stopScreenShare() : setShowPicker(true))}
@@ -100,6 +119,11 @@ export function VoicePanel({
               Sair
             </button>
           </div>
+
+          {localCameraStream && <RemoteVideo stream={localCameraStream} label="Sua câmera" muted />}
+          {Object.entries(remoteCameraStreams).map(([peerId, stream]) => (
+            <RemoteVideo key={peerId} stream={stream} label={participantName(peerId)} />
+          ))}
 
           {localScreenStream && (
             <RemoteVideo stream={localScreenStream} label="Você está compartilhando a tela" muted />

@@ -1,22 +1,42 @@
-// Mesh WebRTC (FASE 6/8 no backend, FASE 11 fatias 4/5 aqui): uma
+// Mesh WebRTC (FASE 6/7/8 no backend, FASE 11 fatias 4/5/6 aqui): uma
 // RTCPeerConnection por participante da sala, sinalização relayada via
 // Phoenix Channel (voice:{channel_id} — ver stores/voiceStore.ts), mídia
 // nunca passa pelo WebSocket. Nunca chamar isso fora de uma sala de voz
 // pequena (~8 participantes só-áudio) — é exatamente o limite que
-// docs/media.md documenta para o mesh. Tela (fatia 5) reaproveita as
-// mesmas conexões — não é um mesh separado.
+// docs/media.md documenta para o mesh. Tela (fatia 5) e câmera (fatia 6)
+// reaproveitam as mesmas conexões — não são meshes separados, e as duas
+// podem estar ativas ao mesmo tempo pra uma mesma pessoa.
 //
 // Perfect negotiation (papel polite/impolite por comparação de user_id,
 // como docs/media.md especifica) evita que duas ofertas simultâneas
 // (glare) corrompam o estado de sinalização quando dois peers entram quase
 // ao mesmo tempo. Padrão de referência: https://developer.mozilla.org/docs/Web/API/WebRTC_API/Perfect_negotiation
+//
+// Câmera/tela usam criação PREGUIÇOSA de sender (só na primeira vez que
+// ligam de verdade) e depois só replaceTrack — nunca removeTrack. Testado
+// e descartado: pré-criar os dois transceivers de vídeo logo no addPeer
+// (antes de qualquer negociação) parecia mais "limpo", mas quebra de um
+// jeito sutil quando há glare na negociação inicial (dois peers entrando
+// quase ao mesmo tempo) — o lado que perde o glare faz rollback da própria
+// oferta, e os transceivers pré-criados por ELE ficam órfãos (nunca
+// chegam a ser negociados), e a renegociação seguinte (ligar câmera/tela)
+// tenta reaproveitar esses transceivers órfãos junto com os que vieram da
+// oferta do outro lado — resultando numa oferta com m-lines fora de ordem
+// ("the order of m-lines... doesn't match"). Criar o sender só quando a
+// câmera/tela realmente liga (bem depois da negociação inicial já estar
+// estável, na prática) evita esse cenário de glare por completo pra esses
+// slots. Sem transceiver fixo por slot, a track de vídeo recebida não diz
+// sozinha se é câmera ou tela — por isso stores/voiceStore.ts desambigua
+// usando o que o Presence já informa.
 
 export type SignalEvent = 'sdp:offer' | 'sdp:answer' | 'ice:candidate'
 export type SignalSender = (toUserId: string, event: SignalEvent, payload: Record<string, unknown>) => void
 
 export interface MeshCallbacks {
   onRemoteTrack: (peerId: string, track: MediaStreamTrack, stream: MediaStream) => void
-  onRemoteTrackEnded: (peerId: string, kind: 'audio' | 'video') => void
+  // trackId identifica QUAL track específica terminou (um peer pode ter
+  // duas tracks de vídeo ao mesmo tempo — câmera e tela).
+  onRemoteTrackEnded: (peerId: string, kind: 'audio' | 'video', trackId: string) => void
   onPeerRemoved: (peerId: string) => void
 }
 
@@ -28,13 +48,15 @@ interface PeerEntry {
   makingOffer: boolean
   ignoreOffer: boolean
   pendingCandidates: RTCIceCandidateInit[]
+  cameraSender: RTCRtpSender | null
+  screenSender: RTCRtpSender | null
 }
 
 export class MeshManager {
   private peers = new Map<string, PeerEntry>()
   private localStream: MediaStream | null = null
+  private cameraStream: MediaStream | null = null
   private screenStream: MediaStream | null = null
-  private screenSenders = new Map<string, RTCRtpSender>()
 
   constructor(
     private readonly localUserId: string,
@@ -55,23 +77,30 @@ export class MeshManager {
     })
   }
 
-  // Tela (FASE 11, fatia 5): mesma peer connection da voz, não uma nova —
-  // adicionar/remover a track renegocia sozinho via perfect negotiation
-  // (onnegotiationneeded), igual docs/media.md especifica. `stream: null`
-  // para parar de compartilhar.
+  setCameraTrack(stream: MediaStream | null): void {
+    this.cameraStream?.getTracks().forEach((track) => track.stop())
+    this.cameraStream = stream
+    this.applyVideoSlot('cameraSender', stream)
+  }
+
   setScreenTrack(stream: MediaStream | null): void {
-    for (const [peerId, sender] of this.screenSenders) {
-      this.peers.get(peerId)?.connection.removeTrack(sender)
-    }
-    this.screenSenders.clear()
     this.screenStream?.getTracks().forEach((track) => track.stop())
     this.screenStream = stream
+    this.applyVideoSlot('screenSender', stream)
+  }
 
-    const track = stream?.getVideoTracks()[0]
-    if (!stream || !track) return
-
-    for (const [peerId, entry] of this.peers) {
-      this.screenSenders.set(peerId, entry.connection.addTrack(track, stream))
+  private applyVideoSlot(slot: 'cameraSender' | 'screenSender', stream: MediaStream | null): void {
+    const track = stream?.getVideoTracks()[0] ?? null
+    for (const entry of this.peers.values()) {
+      const sender = entry[slot]
+      if (sender) {
+        // Já existe (negociado antes) — trocar não renegocia.
+        sender.replaceTrack(track)
+      } else if (track) {
+        // Primeira vez que essa pessoa liga câmera/tela nessa chamada —
+        // única vez que isso renegocia de verdade.
+        entry[slot] = entry.connection.addTrack(track, stream as MediaStream)
+      }
     }
   }
 
@@ -87,11 +116,19 @@ export class MeshManager {
       polite,
       makingOffer: false,
       ignoreOffer: false,
-      pendingCandidates: []
+      pendingCandidates: [],
+      cameraSender: null,
+      screenSender: null
     }
     this.peers.set(peerId, entry)
 
     connection.onnegotiationneeded = async () => {
+      // Evita chamar setLocalDescription() de novo enquanto uma
+      // negociação anterior ainda não voltou pra "stable" — sem isso, duas
+      // renegociações próximas (ex.: ligar câmera logo depois de entrar)
+      // podiam corromper a ordem das m-lines na oferta seguinte.
+      if (connection.signalingState !== 'stable') return
+
       try {
         entry.makingOffer = true
         await connection.setLocalDescription()
@@ -111,7 +148,7 @@ export class MeshManager {
       const stream = event.streams[0] ?? new MediaStream([event.track])
       this.callbacks.onRemoteTrack(peerId, event.track, stream)
       event.track.addEventListener('ended', () => {
-        this.callbacks.onRemoteTrackEnded(peerId, event.track.kind as 'audio' | 'video')
+        this.callbacks.onRemoteTrackEnded(peerId, event.track.kind as 'audio' | 'video', event.track.id)
       })
     }
 
@@ -123,9 +160,13 @@ export class MeshManager {
 
     this.attachLocalTracks(connection)
 
+    // Se eu já estiver com câmera/tela ligadas quando essa pessoa entrar
+    // na sala, ela precisa receber isso desde já.
+    if (this.cameraStream) {
+      entry.cameraSender = connection.addTrack(this.cameraStream.getVideoTracks()[0], this.cameraStream)
+    }
     if (this.screenStream) {
-      const screenTrack = this.screenStream.getVideoTracks()[0]
-      if (screenTrack) this.screenSenders.set(peerId, connection.addTrack(screenTrack, this.screenStream))
+      entry.screenSender = connection.addTrack(this.screenStream.getVideoTracks()[0], this.screenStream)
     }
   }
 
@@ -134,7 +175,6 @@ export class MeshManager {
     if (!entry) return
     entry.connection.close()
     this.peers.delete(peerId)
-    this.screenSenders.delete(peerId)
     this.callbacks.onPeerRemoved(peerId)
   }
 
@@ -183,9 +223,10 @@ export class MeshManager {
     for (const peerId of [...this.peers.keys()]) this.removePeer(peerId)
     this.localStream?.getTracks().forEach((track) => track.stop())
     this.localStream = null
+    this.cameraStream?.getTracks().forEach((track) => track.stop())
+    this.cameraStream = null
     this.screenStream?.getTracks().forEach((track) => track.stop())
     this.screenStream = null
-    this.screenSenders.clear()
   }
 
   private attachLocalTracks(connection: RTCPeerConnection): void {

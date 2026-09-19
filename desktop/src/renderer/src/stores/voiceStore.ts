@@ -26,12 +26,16 @@ interface VoiceState {
   screenSharing: boolean
   localScreenStream: MediaStream | null
   remoteScreenStreams: Record<string, MediaStream>
+  videoEnabled: boolean
+  localCameraStream: MediaStream | null
+  remoteCameraStreams: Record<string, MediaStream>
   error: string | null
   join: (channelId: string, currentUserId: string) => Promise<void>
   leave: () => void
   toggleMute: () => void
   startScreenShare: (sourceId: string) => Promise<void>
   stopScreenShare: () => void
+  toggleVideo: () => Promise<void>
 }
 
 let phoenixChannel: Channel | null = null
@@ -46,6 +50,9 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
   screenSharing: false,
   localScreenStream: null,
   remoteScreenStreams: {},
+  videoEnabled: false,
+  localCameraStream: null,
+  remoteCameraStreams: {},
   error: null,
 
   join: async (channelId, currentUserId) => {
@@ -78,32 +85,71 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
         channel.push(event, { to: toUserId, ...payload })
       },
       {
+        // Sem transceiver fixo por slot (ver webrtc/MeshManager.ts) — pra
+        // vídeo, desambigua câmera vs tela usando o que o Presence já diz
+        // sobre esse peer (video/screen_sharing). Isso funciona porque
+        // toggleVideo/startScreenShare abaixo sempre atualizam o Presence
+        // ANTES de anexar a track de verdade, então quando a track chega
+        // aqui o Presence já reflete o que ela é.
         onRemoteTrack: (peerId, track, stream) => {
           if (track.kind === 'audio') {
             set((state) => ({ remoteAudioStreams: { ...state.remoteAudioStreams, [peerId]: stream } }))
-          } else {
-            set((state) => ({ remoteScreenStreams: { ...state.remoteScreenStreams, [peerId]: stream } }))
+            return
           }
-        },
-        onRemoteTrackEnded: (peerId, kind) => {
+
           set((state) => {
-            if (kind === 'audio') {
+            const participant = state.participants.find((p) => p.userId === peerId)
+            const hasCamera = !!state.remoteCameraStreams[peerId]
+            const hasScreen = !!state.remoteScreenStreams[peerId]
+
+            const isScreen = participant?.screen_sharing && !hasScreen
+            const isCamera = !isScreen && participant?.video && !hasCamera
+
+            if (isScreen) {
+              return { remoteScreenStreams: { ...state.remoteScreenStreams, [peerId]: stream } }
+            }
+            if (isCamera) {
+              return { remoteCameraStreams: { ...state.remoteCameraStreams, [peerId]: stream } }
+            }
+            // Presence ainda não chegou/desatualizado — usa o slot livre.
+            return hasScreen
+              ? { remoteCameraStreams: { ...state.remoteCameraStreams, [peerId]: stream } }
+              : { remoteScreenStreams: { ...state.remoteScreenStreams, [peerId]: stream } }
+          })
+        },
+        onRemoteTrackEnded: (peerId, kind, trackId) => {
+          if (kind === 'audio') {
+            set((state) => {
               const rest = { ...state.remoteAudioStreams }
               delete rest[peerId]
               return { remoteAudioStreams: rest }
+            })
+            return
+          }
+
+          set((state) => {
+            if (state.remoteCameraStreams[peerId]?.getVideoTracks().some((t) => t.id === trackId)) {
+              const rest = { ...state.remoteCameraStreams }
+              delete rest[peerId]
+              return { remoteCameraStreams: rest }
             }
-            const rest = { ...state.remoteScreenStreams }
-            delete rest[peerId]
-            return { remoteScreenStreams: rest }
+            if (state.remoteScreenStreams[peerId]?.getVideoTracks().some((t) => t.id === trackId)) {
+              const rest = { ...state.remoteScreenStreams }
+              delete rest[peerId]
+              return { remoteScreenStreams: rest }
+            }
+            return {}
           })
         },
         onPeerRemoved: (peerId) => {
           set((state) => {
             const audio = { ...state.remoteAudioStreams }
             const screen = { ...state.remoteScreenStreams }
+            const camera = { ...state.remoteCameraStreams }
             delete audio[peerId]
             delete screen[peerId]
-            return { remoteAudioStreams: audio, remoteScreenStreams: screen }
+            delete camera[peerId]
+            return { remoteAudioStreams: audio, remoteScreenStreams: screen, remoteCameraStreams: camera }
           })
         }
       }
@@ -135,9 +181,20 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
         if (participant.userId !== currentUserId) meshManager.addPeer(participant.userId)
       }
     })
-    presence.onLeave((userId) => {
-      if (userId) meshManager.removePeer(userId)
-    })
+    // De propósito, `presence.onLeave` NÃO derruba a peer connection.
+    // `Presence.update` (usado por mute/deafen/video/screen_sharing, ver
+    // voice_channel.ex) já manda o leave+join do mesmo par de metas num
+    // diff atômico do lado do servidor — mas a computação desse diff é
+    // assíncrona (Phoenix.Presence roda cada `handle_diff` numa Task), e
+    // sob rajada de updates próximos (ex.: ligar câmera e, segundos
+    // depois, ligar tela) as tasks podem terminar fora de ordem, fazendo
+    // o cliente enxergar um "leave" sem o join correspondente ainda
+    // aplicado — mesmo a pessoa nunca tendo saído de verdade. Confirmado
+    // ao vivo: isso derrubava a peer connection inteira no meio de uma
+    // chamada, corrompendo a negociação seguinte (m-lines fora de ordem).
+    // Quem decide se um peer realmente sumiu é o próprio WebRTC — quando
+    // a conexão para de verdade, `connectionstatechange` vira 'failed'
+    // (ver MeshManager.addPeer) e o cleanup acontece por ali.
 
     try {
       await new Promise<void>((resolve, reject) => {
@@ -170,7 +227,10 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
       localMuted: false,
       screenSharing: false,
       localScreenStream: null,
-      remoteScreenStreams: {}
+      remoteScreenStreams: {},
+      videoEnabled: false,
+      localCameraStream: null,
+      remoteCameraStreams: {}
     })
   },
 
@@ -236,5 +296,51 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
     mesh?.setScreenTrack(null)
     phoenixChannel?.push('screen_share:stop', {})
     set({ screenSharing: false, localScreenStream: null })
+  },
+
+  toggleVideo: async () => {
+    if (get().videoEnabled) {
+      mesh?.setCameraTrack(null)
+      phoenixChannel?.push('video:disable', {})
+      set({ videoEnabled: false, localCameraStream: null })
+      return
+    }
+
+    const channel = phoenixChannel
+    if (!channel || !mesh) return
+    set({ error: null })
+
+    // Reivindica o slot no servidor (cap de 4 participantes com vídeo,
+    // ver docs/media.md) ANTES de ligar a câmera — diferente da tela, não
+    // tem nenhuma escolha de UI pra "desperdiçar" aqui, então falhar rápido
+    // é melhor do que piscar a câmera à toa se a sala já estiver cheia.
+    const reply = await new Promise<{ ok: boolean; reason?: string }>((resolve) => {
+      channel
+        .push('video:enable', {})
+        .receive('ok', () => resolve({ ok: true }))
+        .receive('error', (resp: { reason?: string }) => resolve({ ok: false, reason: resp?.reason }))
+    })
+
+    if (!reply.ok) {
+      set({
+        error:
+          reply.reason === 'video_limit_reached'
+            ? 'limite de 4 participantes com vídeo atingido nessa sala'
+            : 'não foi possível ativar a câmera'
+      })
+      return
+    }
+
+    let stream: MediaStream
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ video: true })
+    } catch (err) {
+      phoenixChannel?.push('video:disable', {})
+      set({ error: err instanceof Error ? `câmera: ${err.message}` : 'falha ao acessar a câmera' })
+      return
+    }
+
+    mesh.setCameraTrack(stream)
+    set({ videoEnabled: true, localCameraStream: stream })
   }
 }))
