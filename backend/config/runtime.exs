@@ -57,6 +57,15 @@ if config_env() == :prod do
 
   config :tora_dos_burro, :dns_cluster_query, System.get_env("DNS_CLUSTER_QUERY")
 
+  guardian_secret_key =
+    System.get_env("GUARDIAN_SECRET_KEY") ||
+      raise """
+      environment variable GUARDIAN_SECRET_KEY is missing.
+      You can generate one by calling: mix guardian.gen.secret
+      """
+
+  config :tora_dos_burro, ToraDosBurro.Guardian, secret_key: guardian_secret_key
+
   config :tora_dos_burro, ToraDosBurroWeb.Endpoint,
     url: [host: host, port: 443, scheme: "https"],
     http: [

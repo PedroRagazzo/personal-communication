@@ -30,6 +30,17 @@ config :logger, :default_formatter,
 # Use Jason for JSON parsing in Phoenix
 config :phoenix, :json_library, Jason
 
+# Guardian (JWT) — ver docs/security.md. secret_key é definido por ambiente
+# (dev.exs/test.exs têm um valor fixo de desenvolvimento; runtime.exs lê de
+# GUARDIAN_SECRET_KEY em produção).
+config :tora_dos_burro, ToraDosBurro.Guardian, issuer: "tora_dos_burro"
+
+# guardian_db — rastreia tokens emitidos para permitir revogação/rotação
+# reais (Guardian sozinho é stateless). Ver migration create_guardian_tokens.
+config :guardian, Guardian.DB,
+  repo: ToraDosBurro.Repo,
+  schema_name: "guardian_tokens"
+
 # Import environment specific config. This must remain at the bottom
 # of this file so it overrides the configuration defined above.
 import_config "#{config_env()}.exs"

@@ -5,10 +5,25 @@ defmodule ToraDosBurroWeb.Router do
     plug :accepts, ["json"]
   end
 
+  pipeline :auth do
+    plug ToraDosBurroWeb.AuthPipeline
+  end
+
   scope "/api/v1", ToraDosBurroWeb do
     pipe_through :api
 
     get "/health", HealthController, :index
+
+    post "/auth/register", AuthController, :register
+    post "/auth/login", AuthController, :login
+    post "/auth/refresh", AuthController, :refresh
+    post "/auth/logout", AuthController, :logout
+  end
+
+  scope "/api/v1", ToraDosBurroWeb do
+    pipe_through [:api, :auth]
+
+    get "/users/me", UserController, :me
   end
 
   # Enable LiveDashboard in development

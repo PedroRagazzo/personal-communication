@@ -55,6 +55,12 @@ config :tora_dos_burro, ToraDosBurroWeb.Endpoint,
 # Enable dev routes for dashboard and mailbox
 config :tora_dos_burro, dev_routes: true
 
+# Guardian (JWT) — chave só de desenvolvimento, nunca usada em produção
+# (runtime.exs le de GUARDIAN_SECRET_KEY para prod). Gerada com
+# `mix guardian.gen.secret`.
+config :tora_dos_burro, ToraDosBurro.Guardian,
+  secret_key: "pufN052OsVcTVbvaXElKSZXkV0LwMAbUkhL1SWrql8DTMRDuQHGNo_51syCNrIpN"
+
 # Do not include metadata nor timestamps in development logs
 config :logger, :default_formatter, format: "[$level] $message\n"
 

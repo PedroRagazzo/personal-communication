@@ -23,6 +23,13 @@ config :tora_dos_burro, ToraDosBurroWeb.Endpoint,
 # Print only warnings and errors during test
 config :logger, level: :warning
 
+# Guardian (JWT) — chave só de teste. Gerada com `mix guardian.gen.secret`.
+config :tora_dos_burro, ToraDosBurro.Guardian,
+  secret_key: "h1rfvt_LPguB1djZfedINNexR2iPDwZ9M3hOzpGyTLhFediqscycGshtHVOJBz5c"
+
+# argon2 mais rápido em teste (não precisa do custo total de produção)
+config :argon2_elixir, t_cost: 1, m_cost: 8
+
 # Initialize plugs at runtime for faster test compilation
 config :phoenix, :plug_init_mode, :runtime
 
