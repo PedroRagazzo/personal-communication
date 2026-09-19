@@ -13,6 +13,7 @@ Regra que atravessa tudo: **nunca confiar no cliente.** Toda permissão é valid
 - **Guardian** (JWT) para access token (curta duração, ex. 15 min) + **`guardian_db`** para refresh token persistido, revogável e rotacionado a cada uso — Guardian sozinho é stateless e não revoga nada sem essa segunda lib.
 - Autenticação de WebSocket via **connect param**, não header — navegadores não permitem headers customizados no handshake WS, então o token vai na URL/params de conexão do Channel.
 - Cliente Electron guarda tokens via keychain do SO (`safeStorage`), não em `localStorage` puro. **Implementado (FASE 11)**: só o processo `main` chama `safeStorage`/grava em disco (`app.getPath('userData')`); o `preload` só troca IPC (`secure-storage:get/set/delete`), o `renderer` nunca vê `safeStorage` nem o arquivo diretamente.
+- Electron nega toda permissão de navegador por padrão sem um handler explícito. **Implementado (FASE 11, fatia 4)**: `session.setPermissionCheckHandler`/`setPermissionRequestHandler` no `main` liberam só `'media'` (microfone, e câmera quando a fatia de vídeo chegar) — qualquer outra permissão (localização, notificações, etc.) fica negada por padrão.
 - Confirmação de email e recuperação de senha via token de uso único com expiração.
 
 ## Autorização

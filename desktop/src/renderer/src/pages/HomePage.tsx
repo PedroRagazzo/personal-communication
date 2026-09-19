@@ -4,9 +4,11 @@ import { useServersStore } from '../stores/serversStore'
 import { ServerSidebar } from '../components/ServerSidebar'
 import { ChannelList } from '../components/ChannelList'
 import { ChatView } from '../components/ChatView'
+import { VoicePanel } from '../components/VoicePanel'
 
-// Shell autenticado: navegação entre servidores/canais (fatia 2) + chat em
-// tempo real (fatia 3). Voz/vídeo/tela/Go Live no cliente ainda faltam.
+// Shell autenticado: navegação entre servidores/canais (fatia 2), chat em
+// tempo real (fatia 3), voz (fatia 4). Vídeo/tela/Go Live no cliente ainda
+// faltam.
 export function HomePage() {
   const user = useAuthStore((s) => s.user)
   const accessToken = useAuthStore((s) => s.accessToken)
@@ -72,9 +74,7 @@ export function HomePage() {
           <ChatView channel={selectedChannel} accessToken={accessToken} members={members} />
         )}
         {selectedChannel && selectedChannel.type === 'guild_voice' && (
-          <div className="flex flex-1 items-center justify-center text-neutral-600">
-            Canais de voz ainda não funcionam no cliente
-          </div>
+          <VoicePanel channel={selectedChannel} currentUserId={user.id} members={members} />
         )}
         {!selectedChannel && (
           <div className="flex flex-1 items-center justify-center text-neutral-600">

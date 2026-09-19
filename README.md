@@ -21,10 +21,11 @@ Plataforma de comunicação em tempo real (estilo Discord): servidores/comunidad
 | 11 | Cliente Electron — fatia 1: scaffold + autenticação | `v0.10.0` |
 | 11 | Cliente Electron — fatia 2: lista de servidores/canais | `v0.11.0` |
 | 11 | Cliente Electron — fatia 3: chat em tempo real | `v0.12.0` |
+| 11 | Cliente Electron — fatia 4: voz (mesh WebRTC) | `v0.13.0` |
 
-**FASE 11 está em andamento, dividida em fatias** (é grande demais pra uma entrega só — ver `docs/roadmap.md`). Fatia 1: app Electron real (main/preload/renderer isolados), cadastro/login contra o backend, tokens guardados via `safeStorage` (keychain do SO). Fatia 2: navegação entre servidores e canais (só leitura — trouxe também o `GET /api/v1/servers` que faltava no backend). Fatia 3: chat de texto de verdade — histórico via REST, conectado ao socket (`phoenix` client), mensagens novas chegam ao vivo pra todo mundo no canal. Ainda faltam: presença, editar/apagar/reagir mensagem, criar servidor/canal, voz/vídeo/tela/Go Live no cliente, empacotamento.
+**FASE 11 está em andamento, dividida em fatias** (é grande demais pra uma entrega só — ver `docs/roadmap.md`). Fatia 1: app Electron real (main/preload/renderer isolados), cadastro/login contra o backend, tokens guardados via `safeStorage` (keychain do SO). Fatia 2: navegação entre servidores e canais (só leitura — trouxe também o `GET /api/v1/servers` que faltava no backend). Fatia 3: chat de texto de verdade — histórico via REST, conectado ao socket (`phoenix` client), mensagens novas chegam ao vivo pra todo mundo no canal. Fatia 4: voz de verdade — mesh WebRTC com perfect negotiation, microfone real, mute (ver `docs/media.md`). Ainda faltam: vídeo, compartilhamento de tela, deafen, presença de mensagem, editar/apagar/reagir mensagem, criar servidor/canal, Go Live no cliente, empacotamento.
 
-**O qualificador "(backend)" nas FASES 6–9 ainda importa.** Chat de texto (FASE 4) já funciona de ponta a ponta no cliente — mas voz/vídeo/tela/Go Live ainda não: as peer connections WebRTC de verdade, perfect negotiation, STUN/coturn, `desktopCapturer` e a conexão real com o LiveKit ainda não foram implementadas no cliente (próximas fatias da FASE 11). Ninguém liga microfone/câmera/tela/transmissão ainda — só o "esqueleto" do lado servidor está pronto e testado.
+**O qualificador "(backend)" nas FASES 6–9 quase não importa mais.** Chat (FASE 4) e voz (FASE 6, só áudio) já funcionam de ponta a ponta no cliente, com peer connections WebRTC de verdade e perfect negotiation. Ainda faltam no cliente: vídeo (FASE 7), compartilhamento de tela (FASE 8, precisa do `desktopCapturer` do Electron) e a conexão real com o LiveKit (FASE 9, Go Live) — mas a base de peer connections que vídeo/tela vão reaproveitar já está pronta e testada.
 
 **Pendente antes de um MVP completo de ponta a ponta**: anexos leves (FASE 4 — precisa de Docker/MinIO rodando), Amigos/DM (fast-follow fora do MVP formal, schema já pronto), e a própria FASE 11. Confirmação de email e recuperação de senha ficam para uma fatia futura da FASE 2 (dependem de escolher um mailer). LiveKit em si também precisa de Docker para rodar localmente — não verificável neste ambiente, mesma limitação do MinIO.
 
@@ -116,7 +117,7 @@ Abre o app Electron de verdade (não só uma aba de navegador), com hot-reload. 
 
 ## Próximos passos
 
-FASE 11 (Electron) está em andamento — próxima fatia natural é criar servidor/canal no cliente (hoje só dá pra navegar o que já existe), depois voz/vídeo/tela/Go Live. Outras direções em aberto, a decidir com quem está lendo isto:
+FASE 11 (Electron) está em andamento — próxima fatia natural é vídeo (câmera, reaproveitando o mesh já pronto) ou compartilhamento de tela, depois criar servidor/canal no cliente e Go Live. Outras direções em aberto, a decidir com quem está lendo isto:
 
 - **Anexos leves** (fecha a FASE 4, precisa de `docker compose up -d`)
 - **Amigos/DM** (fast-follow, schema já pronto desde a FASE 3/4)

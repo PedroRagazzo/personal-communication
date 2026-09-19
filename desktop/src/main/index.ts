@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, safeStorage } from 'electron'
+import { app, BrowserWindow, ipcMain, safeStorage, session } from 'electron'
 import { join } from 'node:path'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 
@@ -47,6 +47,21 @@ function registerSecureStorageHandlers(): void {
   })
 }
 
+// Electron nega toda permissão por padrão sem um handler explícito — sem
+// isso, getUserMedia (microfone, FASE 11 voz) trava/falha silenciosamente.
+// Só libera 'media' (mic/câmera); tudo mais fica negado por padrão. Os dois
+// handlers juntos são necessários (o check roda antes do request, ver docs
+// do Electron).
+function registerPermissionHandlers(): void {
+  session.defaultSession.setPermissionCheckHandler((_webContents, permission) => {
+    return permission === 'media'
+  })
+
+  session.defaultSession.setPermissionRequestHandler((_webContents, permission, callback) => {
+    callback(permission === 'media')
+  })
+}
+
 function createWindow(): void {
   const win = new BrowserWindow({
     width: 1280,
@@ -74,6 +89,7 @@ function createWindow(): void {
 
 app.whenReady().then(() => {
   registerSecureStorageHandlers()
+  registerPermissionHandlers()
   createWindow()
 
   app.on('activate', () => {

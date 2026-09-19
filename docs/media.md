@@ -55,8 +55,27 @@ na sala com metadata `muted`/`deafened`; eventos `sdp:offer`, `sdp:answer`,
 retransmitidos via `broadcast_from!` — cada cliente filtra pelo `to`. Sem
 tabela nova: é tudo efêmero em Presence, como o `database.md` já previa.
 
-**Ainda não implementado** (depende do cliente Electron, FASE 11): as peer
-connections WebRTC de verdade, perfect negotiation, STUN/coturn.
+**Lado do cliente implementado (FASE 11, fatia 4)**: mesh WebRTC de
+verdade em `desktop/src/renderer/src/webrtc/MeshManager.ts` — uma
+`RTCPeerConnection` por participante, perfect negotiation com papel
+polite/impolite por comparação de `user_id` (igual especificado acima),
+fila de ICE candidates que chegam antes do `setRemoteDescription`
+resolver. `stores/voiceStore.ts` usa a classe `Presence` do próprio
+pacote `phoenix` (não reimplementa parsing de `presence_state`/`diff`) pra
+saber quem entra/sai e criar/destruir peer connections. Verificado com
+dois clientes reais (duas abas independentes, cada uma com seu próprio
+usuário e stream de áudio sintético via Web Audio API — não precisa de
+microfone físico pra validar a malha) trocando tracks de áudio de
+verdade nos dois sentidos. **Só STUN público** (`stun:stun.l.google.com`)
+por enquanto — coturn (TURN) já está no `docker-compose.yml` mas não dá
+pra testar aqui (sem Docker, mesma limitação de sempre); falta ligar o
+cliente nele quando o ambiente permitir.
+
+**Ainda não implementado**: deafen (só mute por enquanto), indicador
+persistente de "conectado à voz" visível fora do canal selecionado
+(hoje sair da visão do canal esconde os controles, mas a chamada continua
+ativa em segundo plano — comportamento correto, só falta a UI pra
+mostrar isso de qualquer lugar do app).
 
 ## Fluxo de vídeo
 
