@@ -1,4 +1,4 @@
-defmodule ToraDosBurroWeb.ChannelController do
+defmodule ToraDosBurroWeb.CategoryController do
   use ToraDosBurroWeb, :controller
 
   alias ToraDosBurro.{Channels, Servers}
@@ -10,19 +10,19 @@ defmodule ToraDosBurroWeb.ChannelController do
 
     with {:ok, server} <- Servers.fetch_server(server_id),
          :ok <- Servers.authorize(server, user, :view_channels) do
-      render(conn, :index, channels: Channels.list_channels(server))
+      render(conn, :index, categories: Channels.list_categories(server))
     end
   end
 
-  def create(conn, %{"server_id" => server_id, "channel" => channel_params}) do
+  def create(conn, %{"server_id" => server_id, "category" => category_params}) do
     user = current_user(conn)
 
     with {:ok, server} <- Servers.fetch_server(server_id),
          :ok <- Servers.authorize(server, user, :manage_channels),
-         {:ok, channel} <- Channels.create_channel(server, channel_params) do
+         {:ok, category} <- Channels.create_category(server, category_params) do
       conn
       |> put_status(:created)
-      |> render(:show, channel: channel)
+      |> render(:show, category: category)
     end
   end
 
@@ -30,10 +30,10 @@ defmodule ToraDosBurroWeb.ChannelController do
     user = current_user(conn)
 
     with {:ok, server} <- Servers.fetch_server(server_id),
-         {:ok, channel} <- Channels.fetch_channel(server, id),
-         :ok <- Channels.authorize(channel, user, :manage_channels),
-         {:ok, updated} <- Channels.update_channel(channel, params) do
-      render(conn, :show, channel: updated)
+         :ok <- Servers.authorize(server, user, :manage_channels),
+         {:ok, category} <- Channels.fetch_category(server, id),
+         {:ok, updated} <- Channels.update_category(category, params) do
+      render(conn, :show, category: updated)
     end
   end
 
@@ -41,9 +41,9 @@ defmodule ToraDosBurroWeb.ChannelController do
     user = current_user(conn)
 
     with {:ok, server} <- Servers.fetch_server(server_id),
-         {:ok, channel} <- Channels.fetch_channel(server, id),
-         :ok <- Channels.authorize(channel, user, :manage_channels),
-         {:ok, _} <- Channels.delete_channel(channel) do
+         :ok <- Servers.authorize(server, user, :manage_channels),
+         {:ok, category} <- Channels.fetch_category(server, id),
+         {:ok, _} <- Channels.delete_category(category) do
       send_resp(conn, :no_content, "")
     end
   end

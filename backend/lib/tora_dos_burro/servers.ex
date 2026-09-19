@@ -156,16 +156,20 @@ defmodule ToraDosBurro.Servers do
 
   def owner?(%Server{} = server, %User{} = user), do: server.owner_id == user.id
 
+  @doc "O cargo `@everyone` do servidor — sempre existe, criado junto com o servidor."
+  def default_role(%Server{} = server) do
+    Repo.get_by(Role, server_id: server.id, is_default: true)
+  end
+
   @doc """
   Bitfield efetivo de permissões do membro: cargo padrão `@everyone` + cargos
   extras combinados via OR bit a bit. O dono do servidor tem acesso total
   independente de cargo (ver `authorize/3`, não passa por aqui).
   """
   def effective_permissions(%Server{} = server, %ServerMember{} = member) do
-    default = Repo.get_by(Role, server_id: server.id, is_default: true)
     member = if Ecto.assoc_loaded?(member.roles), do: member, else: Repo.preload(member, :roles)
 
-    [default | member.roles]
+    [default_role(server) | member.roles]
     |> Enum.reject(&is_nil/1)
     |> Enum.reduce(0, fn role, acc -> Bitwise.bor(acc, role.permissions) end)
   end

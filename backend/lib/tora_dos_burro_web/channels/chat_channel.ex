@@ -6,16 +6,15 @@ defmodule ToraDosBurroWeb.ChatChannel do
 
   use ToraDosBurroWeb, :channel
 
-  alias ToraDosBurro.{Channels, Chat, Servers}
+  alias ToraDosBurro.{Channels, Chat}
 
   @impl true
   def join("channel:" <> channel_id, _params, socket) do
     user = socket.assigns.current_user
 
     with {:ok, channel} <- Channels.fetch_channel(channel_id),
-         {:ok, server} <- Servers.fetch_server(channel.server_id),
-         :ok <- Servers.authorize(server, user, :view_channels) do
-      {:ok, assign(socket, channel: channel, server: server)}
+         :ok <- Channels.authorize(channel, user, :view_channels) do
+      {:ok, assign(socket, channel: channel)}
     else
       _ -> {:error, %{reason: "forbidden"}}
     end
@@ -92,7 +91,7 @@ defmodule ToraDosBurroWeb.ChatChannel do
     if message.author_id == user.id do
       :ok
     else
-      Servers.authorize(socket.assigns.server, user, :manage_messages)
+      Channels.authorize(socket.assigns.channel, user, :manage_messages)
     end
   end
 end

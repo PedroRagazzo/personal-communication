@@ -68,32 +68,56 @@ Permissões (bitfield em `roles.permissions`, ver `ToraDosBurro.Servers.Permissi
 `manage_channels`, `manage_server`, `administrator`. Todo servidor ganha um
 cargo `@everyone` (`is_default: true`) na criação, com um subconjunto seguro
 por padrão; o dono do servidor sempre tem acesso total, independente de cargo.
-`permission_overwrites` (exceção por canal) fica para a FASE 5, quando canais
-existirem de verdade.
+`permission_overwrites` (exceção por canal) ficou para a FASE 5, quando canais
+passaram a existir de verdade — já implementado, ver seção da FASE 5 abaixo.
 
-## FASE 4 — Mensagens e anexos
+## FASE 4 — Canais mínimos e mensagens (núcleo implementado)
 
-Mutações em tempo real acontecem via Channel (`message:create` etc., ver `realtime.md`); REST cobre histórico/paginação e upload.
-
-```
-GET  /api/v1/channels/:id/messages?before=&limit=   (paginação por cursor)
-POST /api/v1/channels/:id/attachments                (retorna URL para anexar na mensagem)
-```
-
-Upload de anexos usa a abstração `ObjectStorage` — endpoint retorna uma URL (presigned, quando o provider suportar) em vez de proxyar os bytes pelo Phoenix.
-
-## FASE 5 — Canais e categorias
+Canal precisa existir para mensagem ter onde morar, então a criação básica de
+canal (só `guild_text`) entrou aqui, não esperou a FASE 5. Mutações de
+mensagem acontecem só via WebSocket (`message:create` etc., ver
+`realtime.md`); REST cobre canal (CRUD) e histórico/paginação.
 
 ```
-GET    /api/v1/servers/:id/channels
-POST   /api/v1/servers/:id/channels
-PATCH  /api/v1/servers/:id/channels/:channel_id
-DELETE /api/v1/servers/:id/channels/:channel_id
+GET    /api/v1/servers/:server_id/channels
+POST   /api/v1/servers/:server_id/channels
+PATCH  /api/v1/servers/:server_id/channels/:id
+DELETE /api/v1/servers/:server_id/channels/:id
 
-GET    /api/v1/servers/:id/categories
-POST   /api/v1/servers/:id/categories
-PATCH  /api/v1/servers/:id/categories/:category_id
+GET    /api/v1/channels/:channel_id/messages?before=&limit=   (paginação por cursor)
 ```
+
+**Pendente** (próxima fatia desta mesma fase, precisa de MinIO rodando):
+```
+POST /api/v1/channels/:id/attachments   (retorna URL pré-assinada para upload direto)
+```
+
+## FASE 5 — Categorias, canal de voz (metadados) e permissões por canal
+
+Implementado. `guild_voice` já existe como tipo de canal criável (estrutura),
+mas a mecânica de voz de verdade (entrar na sala, WebRTC) só chega na FASE 6.
+Não existe flag `is_private` — um canal fica "privado" via
+`permission_overwrite` negando `view_channels` para o cargo `@everyone`.
+Reordenar é só fazer `PATCH` no campo `position` (de canal ou categoria) —
+sem endpoint de "mover em lote" nesta fase.
+
+```
+GET    /api/v1/servers/:server_id/categories
+POST   /api/v1/servers/:server_id/categories
+PATCH  /api/v1/servers/:server_id/categories/:id
+DELETE /api/v1/servers/:server_id/categories/:id
+
+GET    /api/v1/channels/:channel_id/permission_overwrites
+PUT    /api/v1/channels/:channel_id/permission_overwrites
+       (body: target_type ["role"|"member"], target_id, allow, deny — upsert)
+DELETE /api/v1/channels/:channel_id/permission_overwrites/:target_type/:target_id
+```
+
+Resolução de permissão por canal (`ToraDosBurro.Channels.channel_permissions/3`,
+mesma ordem do Discord): permissão efetiva do servidor → overwrite de
+`@everyone` → overwrite dos outros cargos do membro → overwrite do membro
+específico (vale por último). `administrator` ignora overwrites por completo;
+dono do servidor sempre passa, sem checar overwrite nenhum.
 
 ## WebSocket — tópicos de Channel
 

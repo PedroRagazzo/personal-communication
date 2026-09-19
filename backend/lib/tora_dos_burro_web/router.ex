@@ -59,6 +59,18 @@ defmodule ToraDosBurroWeb.Router do
     delete "/servers/:server_id/channels/:id", ChannelController, :delete
 
     get "/channels/:channel_id/messages", MessageController, :index
+
+    get "/servers/:server_id/categories", CategoryController, :index
+    post "/servers/:server_id/categories", CategoryController, :create
+    patch "/servers/:server_id/categories/:id", CategoryController, :update
+    delete "/servers/:server_id/categories/:id", CategoryController, :delete
+
+    get "/channels/:channel_id/permission_overwrites", PermissionOverwriteController, :index
+    put "/channels/:channel_id/permission_overwrites", PermissionOverwriteController, :put
+
+    delete "/channels/:channel_id/permission_overwrites/:target_type/:target_id",
+           PermissionOverwriteController,
+           :delete
   end
 
   # Enable LiveDashboard in development

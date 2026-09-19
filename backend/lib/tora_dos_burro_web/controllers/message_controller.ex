@@ -1,7 +1,7 @@
 defmodule ToraDosBurroWeb.MessageController do
   use ToraDosBurroWeb, :controller
 
-  alias ToraDosBurro.{Channels, Chat, Servers}
+  alias ToraDosBurro.{Channels, Chat}
 
   action_fallback ToraDosBurroWeb.FallbackController
 
@@ -10,8 +10,7 @@ defmodule ToraDosBurroWeb.MessageController do
     user = current_user(conn)
 
     with {:ok, channel} <- Channels.fetch_channel(channel_id),
-         {:ok, server} <- Servers.fetch_server(channel.server_id),
-         :ok <- Servers.authorize(server, user, :view_channels) do
+         :ok <- Channels.authorize(channel, user, :view_channels) do
       opts = [before: params["before"], limit: parse_limit(params["limit"])]
       render(conn, :index, messages: Chat.list_messages(channel, opts))
     end
