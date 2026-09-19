@@ -4,7 +4,7 @@ Plataforma de comunicação em tempo real (estilo Discord): servidores/comunidad
 
 ## Status atual
 
-**FASE 0 — Arquitetura: concluída.** Este repositório contém o planejamento técnico completo e o esqueleto de diretórios. **Nenhum código de aplicação foi escrito ainda** — a FASE 1 (backend Elixir funcional) só começa após confirmação explícita, conforme a regra do projeto de "não avançar fase sem a anterior estar funcional".
+**FASE 0 — Arquitetura: concluída.** **FASE 1 — Backend básico: concluída e verificada** — `mix phx.server` sobe, `GET /api/v1/health` responde `200 {"status":"ok"}`, `mix test` passa (3/3).
 
 Leia primeiro:
 
@@ -43,14 +43,34 @@ docker/     Configuração de infraestrutura local
 
 ## Rodando a infraestrutura local
 
-Ainda não há aplicação para rodar (isso começa na FASE 1), mas a infraestrutura de apoio já pode subir:
+Via Docker (caminho documentado, dá Postgres + Redis + coturn + MinIO de uma vez — o usuário `tora` já vem criado pela imagem oficial do Postgres):
 
 ```bash
 docker compose up -d
 ```
 
-Isso sobe PostgreSQL, Redis, coturn (TURN/STUN) e MinIO (object storage compatível com S3) para desenvolvimento local. Ver [`docker-compose.yml`](docker-compose.yml).
+Alternativa sem Docker (só Postgres, usada durante o desenvolvimento da FASE 1): instale o PostgreSQL 17 localmente e crie o role manualmente:
+
+```sql
+CREATE ROLE tora WITH LOGIN SUPERUSER PASSWORD 'tora_dev_password';
+```
+
+## Rodando o backend
+
+```bash
+cd backend
+mix deps.get
+mix ecto.create
+mix phx.server
+```
+
+Servidor em `http://localhost:4000`. Health check: `http://localhost:4000/api/v1/health`.
+
+```bash
+cd backend
+mix test
+```
 
 ## Próximos passos
 
-Aguardando confirmação para iniciar a **FASE 1 — Backend Elixir** (`mix phx.new`, configuração de ambiente, health check).
+**FASE 2 — Autenticação** (registro, login, Guardian JWT, `guardian_db`, argon2id).
