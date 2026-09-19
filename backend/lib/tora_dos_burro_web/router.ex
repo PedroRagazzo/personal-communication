@@ -52,6 +52,13 @@ defmodule ToraDosBurroWeb.Router do
 
     post "/servers/:server_id/bans", BanController, :create
     delete "/servers/:server_id/bans/:user_id", BanController, :delete
+
+    get "/servers/:server_id/channels", ChannelController, :index
+    post "/servers/:server_id/channels", ChannelController, :create
+    patch "/servers/:server_id/channels/:id", ChannelController, :update
+    delete "/servers/:server_id/channels/:id", ChannelController, :delete
+
+    get "/channels/:channel_id/messages", MessageController, :index
   end
 
   # Enable LiveDashboard in development
