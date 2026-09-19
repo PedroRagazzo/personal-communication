@@ -14,10 +14,47 @@ defmodule ToraDosBurro.Accounts do
     Repo.get_by(User, email: email)
   end
 
+  @max_discriminator_attempts 20
+
+  @doc """
+  Cadastra um usuário, atribuindo automaticamente um discriminator
+  (estilo `usuario#0001`) disponível para o username escolhido — o mesmo
+  username pode se repetir com discriminators diferentes.
+  """
   def register_user(attrs) do
-    %User{}
-    |> User.registration_changeset(attrs)
-    |> Repo.insert()
+    changeset = User.registration_changeset(%User{}, attrs)
+
+    if changeset.valid? do
+      insert_with_discriminator(changeset, @max_discriminator_attempts)
+    else
+      {:error, %{changeset | action: :insert}}
+    end
+  end
+
+  defp insert_with_discriminator(changeset, 0) do
+    {:error,
+     Ecto.Changeset.add_error(
+       changeset,
+       :username,
+       "não tem discriminators disponíveis no momento, tente outro nome"
+     )}
+  end
+
+  defp insert_with_discriminator(changeset, attempts_left) do
+    discriminator = :rand.uniform(9999) |> Integer.to_string() |> String.pad_leading(4, "0")
+    attempt = Ecto.Changeset.put_change(changeset, :discriminator, discriminator)
+
+    case Repo.insert(attempt) do
+      {:error, %Ecto.Changeset{errors: errors} = failed} ->
+        if Keyword.has_key?(errors, :discriminator) do
+          insert_with_discriminator(changeset, attempts_left - 1)
+        else
+          {:error, failed}
+        end
+
+      ok ->
+        ok
+    end
   end
 
   @doc """

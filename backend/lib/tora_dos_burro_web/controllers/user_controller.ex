@@ -7,6 +7,7 @@ defmodule ToraDosBurroWeb.UserController do
     json(conn, %{
       id: user.id,
       username: user.username,
+      discriminator: user.discriminator,
       email: user.email,
       display_name: user.display_name,
       status: user.status

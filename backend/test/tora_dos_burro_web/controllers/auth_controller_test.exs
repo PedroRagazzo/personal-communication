@@ -16,11 +16,16 @@ defmodule ToraDosBurroWeb.AuthControllerTest do
       assert %{
                "access_token" => access_token,
                "refresh_token" => refresh_token,
-               "user" => %{"username" => "pedro", "email" => "pedro@example.com"}
+               "user" => %{
+                 "username" => "pedro",
+                 "email" => "pedro@example.com",
+                 "discriminator" => discriminator
+               }
              } = json_response(conn, 201)
 
       assert is_binary(access_token)
       assert is_binary(refresh_token)
+      assert discriminator =~ ~r/^\d{4}$/
     end
 
     test "devolve 422 com dados inválidos", %{conn: conn} do

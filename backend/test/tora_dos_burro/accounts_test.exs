@@ -10,21 +10,32 @@ defmodule ToraDosBurro.AccountsTest do
   }
 
   describe "register_user/1" do
-    test "cria o usuário com senha hasheada quando os dados são válidos" do
+    test "cria o usuário com senha hasheada e discriminator atribuído quando os dados são válidos" do
       assert {:ok, user} = Accounts.register_user(@valid_attrs)
       assert user.username == "pedro"
       assert user.email == "pedro@example.com"
       assert user.password_hash != nil
       assert user.password_hash != "senha-super-segura"
+      assert user.discriminator =~ ~r/^\d{4}$/
     end
 
-    test "rejeita username duplicado" do
+    test "permite o mesmo username com discriminators diferentes" do
+      assert {:ok, user1} = Accounts.register_user(@valid_attrs)
+
+      assert {:ok, user2} =
+               Accounts.register_user(%{@valid_attrs | "email" => "outro@example.com"})
+
+      assert user1.username == user2.username
+      assert user1.discriminator != user2.discriminator
+    end
+
+    test "rejeita email duplicado" do
       assert {:ok, _user} = Accounts.register_user(@valid_attrs)
 
       assert {:error, changeset} =
-               Accounts.register_user(%{@valid_attrs | "email" => "outro@example.com"})
+               Accounts.register_user(%{@valid_attrs | "username" => "outro_user"})
 
-      assert "has already been taken" in errors_on(changeset).username
+      assert "has already been taken" in errors_on(changeset).email
     end
 
     test "rejeita senha curta" do

@@ -7,6 +7,7 @@ defmodule ToraDosBurro.Accounts.User do
 
   schema "users" do
     field :username, :string
+    field :discriminator, :string
     field :email, :string
     field :password, :string, virtual: true, redact: true
     field :password_hash, :string, redact: true
@@ -23,7 +24,12 @@ defmodule ToraDosBurro.Accounts.User do
     timestamps(type: :utc_datetime)
   end
 
-  @doc false
+  @doc """
+  Changeset de cadastro. `discriminator` propositalmente não entra no
+  `cast/3` — é sempre atribuído pelo `ToraDosBurro.Accounts.register_user/1`,
+  nunca escolhido pelo cliente (estilo Discord: `username#0001`, o mesmo
+  username pode se repetir com discriminators diferentes).
+  """
   def registration_changeset(user, attrs) do
     user
     |> cast(attrs, [:username, :email, :password, :display_name])
@@ -34,10 +40,9 @@ defmodule ToraDosBurro.Accounts.User do
     )
     |> validate_format(:email, ~r/^[^\s]+@[^\s]+\.[^\s]+$/, message: "formato de email inválido")
     |> validate_length(:password, min: 8, max: 128)
-    |> unsafe_validate_unique(:username, ToraDosBurro.Repo)
-    |> unique_constraint(:username)
     |> unsafe_validate_unique(:email, ToraDosBurro.Repo)
     |> unique_constraint(:email)
+    |> unique_constraint(:discriminator, name: :users_username_discriminator_index)
     |> put_password_hash()
   end
 

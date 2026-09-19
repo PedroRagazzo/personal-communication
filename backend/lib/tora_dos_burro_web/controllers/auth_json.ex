@@ -10,6 +10,12 @@ defmodule ToraDosBurroWeb.AuthJSON do
   end
 
   defp user_json(%User{} = user) do
-    %{id: user.id, username: user.username, email: user.email, display_name: user.display_name}
+    %{
+      id: user.id,
+      username: user.username,
+      discriminator: user.discriminator,
+      email: user.email,
+      display_name: user.display_name
+    }
   end
 end
