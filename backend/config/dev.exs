@@ -69,6 +69,10 @@ config :tora_dos_burro, ToraDosBurro.GoLive.LiveKitToken,
   api_secret: "secret",
   url: "ws://localhost:7880"
 
+# CORS (FASE 11) — origem do cliente Electron em dev: o dev server do Vite
+# (electron-vite), porta padrão do Vite.
+config :cors_plug, origin: ["http://localhost:5173"]
+
 # Do not include metadata nor timestamps in development logs
 config :logger, :default_formatter, format: "[$level] $message\n"
 

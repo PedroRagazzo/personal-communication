@@ -83,6 +83,9 @@ if config_env() == :prod do
     api_secret: livekit_api_secret,
     url: livekit_url
 
+  config :cors_plug,
+    origin: System.get_env("CORS_ORIGIN", "") |> String.split(",", trim: true)
+
   config :tora_dos_burro, ToraDosBurroWeb.Endpoint,
     url: [host: host, port: 443, scheme: "https"],
     http: [

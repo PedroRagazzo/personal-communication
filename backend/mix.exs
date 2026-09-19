@@ -52,7 +52,8 @@ defmodule ToraDosBurro.MixProject do
       {:argon2_elixir, "~> 4.1"},
       {:guardian, "~> 2.5"},
       {:guardian_db, "~> 3.0"},
-      {:joken, "~> 2.7"}
+      {:joken, "~> 2.7"},
+      {:cors_plug, "~> 3.0"}
     ]
   end
 

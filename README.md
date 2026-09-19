@@ -18,8 +18,11 @@ Plataforma de comunicação em tempo real (estilo Discord): servidores/comunidad
 | 7 | Vídeo (cap de 4 participantes por sala) | `v0.7.0` |
 | 8 | Compartilhamento de tela (1 por sala) | `v0.8.0` |
 | 9 | Go Live — sinalização (tokens LiveKit + Presence, SFU: LiveKit) | `v0.9.0` |
+| 11 | Cliente Electron — fatia 1: scaffold + autenticação | `v0.10.0` |
 
-**O qualificador "(backend)" importa.** FASES 6–9 implementaram toda a sinalização/autorização/Presence do lado do servidor para voz, vídeo, tela e Go Live — mas as peer connections WebRTC de verdade, perfect negotiation, STUN/coturn, `desktopCapturer` e a conexão real com o LiveKit são client-side e só chegam com o Electron (FASE 11). Sem um cliente de verdade ainda, ninguém liga microfone/câmera/tela/transmissão — só o "esqueleto" que torna isso possível está pronto e testado (inclusive com cliente WebSocket real, não só a suíte automatizada).
+**FASE 11 está em andamento, dividida em fatias** (é grande demais pra uma entrega só — ver `docs/roadmap.md`). Fatia 1 (concluída): app Electron real (main/preload/renderer isolados), cadastro/login contra o backend, tokens guardados via `safeStorage` (keychain do SO). Ainda faltam: lista de servidores, conexão com o socket/chat, voz/vídeo/tela/Go Live no cliente, empacotamento.
+
+**O qualificador "(backend)" nas FASES 6–9 ainda importa parcialmente.** Autenticação já liga cliente↔servidor de ponta a ponta — mas as peer connections WebRTC de verdade, perfect negotiation, STUN/coturn, `desktopCapturer` e a conexão real com o LiveKit ainda não foram implementadas no cliente (próximas fatias da FASE 11). Ninguém liga microfone/câmera/tela/transmissão ainda — só o "esqueleto" do lado servidor está pronto e testado (inclusive com cliente WebSocket real, não só a suíte automatizada).
 
 **Pendente antes de um MVP completo de ponta a ponta**: anexos leves (FASE 4 — precisa de Docker/MinIO rodando), Amigos/DM (fast-follow fora do MVP formal, schema já pronto), e a própria FASE 11. Confirmação de email e recuperação de senha ficam para uma fatia futura da FASE 2 (dependem de escolher um mailer). LiveKit em si também precisa de Docker para rodar localmente — não verificável neste ambiente, mesma limitação do MinIO.
 
@@ -97,11 +100,22 @@ de rodar `mix`:
 cmd /c '"C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvarsall.bat" x64 && set' | ForEach-Object { if ($_ -match '^([^=]+)=(.*)$') { [Environment]::SetEnvironmentVariable($matches[1], $matches[2], 'Process') } }
 ```
 
+## Rodando o cliente desktop
+
+Precisa do backend rodando (`mix phx.server`, acima) — o cliente fala com ele via `http://localhost:4000`.
+
+```bash
+cd desktop
+npm install
+npm run dev
+```
+
+Abre o app Electron de verdade (não só uma aba de navegador), com hot-reload. `npm run build` gera o bundle de produção em `desktop/out/` (empacotamento/instalador ainda não existe — fica para uma fatia futura da FASE 11). `npm run typecheck` roda o `tsc --noEmit` separado para `main`/`preload` (Node) e `renderer` (DOM).
+
 ## Próximos passos
 
-Fim do MVP (backend) + FASE 9 — algumas direções possíveis, a decidir com quem está lendo isto:
+FASE 11 (Electron) está em andamento — próxima fatia natural é ligar o cliente no socket (lista de servidores, canais, chat em tempo real), depois voz/vídeo/tela/Go Live. Outras direções em aberto, a decidir com quem está lendo isto:
 
-- **FASE 11 — Cliente Electron** (é o que faz voz/vídeo/tela/Go Live funcionarem de verdade, ligando no que já existe)
 - **Anexos leves** (fecha a FASE 4, precisa de `docker compose up -d`)
 - **Amigos/DM** (fast-follow, schema já pronto desde a FASE 3/4)
 - Ou seguir a ordem original: FASE 10 (arquivos, hardening), 12–18

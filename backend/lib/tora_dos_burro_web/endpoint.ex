@@ -43,6 +43,12 @@ defmodule ToraDosBurroWeb.Endpoint do
   plug Plug.RequestId
   plug Plug.Telemetry, event_prefix: [:phoenix, :endpoint]
 
+  # Cliente Electron roda em origem diferente (dev server do Vite em dev,
+  # file://custom protocol em produção) — sem isso o navegador bloqueia todo
+  # fetch pro backend. Origem configurada via `config :cors_plug, origin:`
+  # (dev.exs / runtime.exs), lida em runtime pelo próprio CORSPlug.
+  plug CORSPlug
+
   plug Plug.Parsers,
     parsers: [:urlencoded, :multipart, :json],
     pass: ["*/*"],

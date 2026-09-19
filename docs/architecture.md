@@ -101,7 +101,7 @@ Antes de introduzir C++ em qualquer componente, responder (regra do projeto): po
 ```
 tora-dos-burro/
 ├── backend/        Elixir/Phoenix (lib/, test/, priv/, config/)
-├── desktop/        React + Electron + TS (src/{main,preload,components,pages,hooks,stores,services,websocket,webrtc,audio,video}/)
+├── desktop/        React + Electron + TS — ver estrutura do src/ abaixo
 ├── rust/           media/, encoder/, sdk/, networking/ — placeholders até FASE 12
 ├── cpp/            audio/, dsp/, video/, capture/ — placeholders até FASE 13
 ├── python/         analytics/, ml/, moderation/, data/ — placeholders até FASE 14
@@ -111,7 +111,16 @@ tora-dos-burro/
 └── README.md
 ```
 
-`desktop/src/main/` e `desktop/src/preload/` existem desde o início (mesmo vazios) porque a captura de tela **precisa** rodar no processo `main` do Electron (`desktopCapturer`) — separar isso agora evita retrofitar isolamento de contexto depois que código do renderer já assumir acesso direto ao Node. Configuração alvo: `contextIsolation: true`, `nodeIntegration: false`, ponte tipada via `contextBridge`.
+### `desktop/src/` (FASE 11)
+
+```
+src/
+├── main/           processo main do Electron (janela, IPC, secure storage) — único com acesso a Node/Electron de verdade
+├── preload/        ponte typed via contextBridge — nada além disso é exposto ao renderer
+└── renderer/       app React (Vite) — index.html + src/{pages,components,hooks,stores,services,websocket,webrtc,audio,video}/
+```
+
+Layout padrão do `electron-vite` (a ferramenta escolhida no plano da FASE 0), não o esboço plano original da FASE 0 (`src/{main,preload,pages,...}` todos irmãos) — corrigido ao implementar de verdade: misturar pastas do renderer (browser, sem Node) no mesmo nível de `main`/`preload` (Node puro) arriscava o scanner de módulos do Vite processar código errado no contexto errado. `desktopCapturer` (captura de tela) vai rodar no `main`, quando essa fatia chegar; a ponte `preload`/`contextBridge` já está em uso desde a FASE 11 fatia 1, para o secure storage de tokens (`safeStorage`, ver `security.md`) — mesmo mecanismo que a fatia de compartilhamento de tela vai reaproveitar. Configuração: `contextIsolation: true`, `nodeIntegration: false`, `sandbox: true`.
 
 ## Decisões de versão (confirmadas em setembro/2026, revalidar no início de cada fase)
 
