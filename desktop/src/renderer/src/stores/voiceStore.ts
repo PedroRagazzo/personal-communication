@@ -263,24 +263,20 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
       return
     }
 
-    // Só reivindica o slot no servidor DEPOIS que o usuário já escolheu a
-    // fonte — se alguém já está compartilhando, ele não passa pela escolha
-    // de janela à toa.
-    const reply = await new Promise<{ ok: boolean; reason?: string }>((resolve) => {
+    // Sem limite de compartilhamentos simultâneos por sala (servidor único,
+    // ~20 pessoas, não público) — `screen_share:start` sempre responde ok,
+    // mas ainda usa push/reply em vez de fire-and-forget pra não perder um
+    // erro genérico de canal (rede caiu, etc.).
+    const ok = await new Promise<boolean>((resolve) => {
       channel
         .push('screen_share:start', {})
-        .receive('ok', () => resolve({ ok: true }))
-        .receive('error', (resp: { reason?: string }) => resolve({ ok: false, reason: resp?.reason }))
+        .receive('ok', () => resolve(true))
+        .receive('error', () => resolve(false))
     })
 
-    if (!reply.ok) {
+    if (!ok) {
       stream.getTracks().forEach((track) => track.stop())
-      set({
-        error:
-          reply.reason === 'screen_share_in_use'
-            ? 'alguém já está compartilhando a tela nessa sala'
-            : 'não foi possível compartilhar a tela'
-      })
+      set({ error: 'não foi possível compartilhar a tela' })
       return
     }
 

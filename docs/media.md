@@ -15,11 +15,12 @@ Sinalização (SDP/ICE) sempre via Phoenix Channels (`voice:{channel_id}`, ver `
 Mesh escala mal com vídeo porque cada participante precisa decodificar um stream por peer. Limites explícitos, aplicados **no servidor** (Phoenix Channel), não deixados a cargo do cliente:
 
 - Canal só-áudio: confortável até **~8 participantes** (opus é ~24–64kbps por stream, custo de fan-out é baixo).
-- Assim que vídeo ou tela entra em jogo, o limite passa a ser por **faixas de vídeo concorrentes**, não por pessoas: câmera e compartilhamento de tela contam juntos.
-- **Máximo 4 participantes com vídeo habilitado por canal.**
-- **Apenas 1 compartilhamento de tela ativo por vez por canal.**
-- Aplicação: o Channel rejeita a adição da 5ª faixa de vídeo ou do 2º compartilhamento simultâneo; o cliente cai para áudio-only ou mostra erro claro — nunca decidido só no cliente.
+- Vídeo (câmera): **máximo 4 participantes com vídeo habilitado por canal**, aplicado no servidor no momento de habilitar — cada faixa a mais é mais um stream que todo mundo na chamada precisa decodificar.
+- Aplicação: o Channel rejeita a adição da 5ª faixa de câmera; o cliente cai para áudio-only ou mostra erro claro — nunca decidido só no cliente.
+- **Compartilhamento de tela não tem limite de simultâneos** (decisão revisada — ver nota abaixo). Isso é uma escolha deliberada de produto para este deploy específico, não uma correção geral do problema de fan-out do mesh: continua valendo que cada tela simultânea é mais uma faixa de vídeo que cada participante da chamada decodifica, exatamente como uma faixa de câmera a mais.
 - Acima desses limites (salas maiores, Go Live): migrar para SFU (ver abaixo).
+
+**Nota sobre a remoção do limite de 1 tela por vez**: desde a FASE 8, compartilhamento de tela foi exclusivo (só uma pessoa por sala), pelo mesmo motivo do cap de vídeo — custo de fan-out do mesh. Removido logo depois da fatia 6 da FASE 11 (vídeo/câmera), a pedido do usuário: este deploy é **um único servidor, uso privado por ~20 pessoas conhecidas, nunca público** — não o cenário de "sala grande e aberta" que o limite original supunha. A tradeoff (mais telas simultâneas = mais decode por peer) continua real e não foi resolvida, só aceita conscientemente dado o tamanho e o caráter do grupo; **não é uma mudança segura de generalizar** para um deploy público ou com salas de voz maiores sem reconsiderar. Ver `docs/roadmap.md`.
 
 ## Fluxo de voz
 
@@ -109,18 +110,22 @@ avisa o `main` → `getDisplayMedia()` dispara
 `session.setDisplayMediaRequestHandler`, que já sabe o que liberar.
 `MeshManager.setScreenTrack()` adiciona a track de vídeo às mesmas peer
 connections da voz (nunca um mesh separado) — renegocia sozinho via o
-mesmo perfect negotiation. **Reivindicação do slot exclusivo
-(`screen_share:start`) só acontece depois que o usuário já escolheu a
-fonte**, não antes — assim ninguém passa pela escolha de janela à toa se
-alguém já estiver compartilhando. Verificado com hardware de verdade:
-tela real (2560×1440) capturada no Electron de verdade (via CDP, já que
+mesmo perfect negotiation. `screen_share:start` (`voiceStore.ts`) só é
+chamado depois que o usuário já escolheu a fonte, não antes — assim a
+escolha de janela nunca é feita à toa se o push falhar por algum motivo
+de canal (rede, etc.). Verificado com hardware de verdade: tela real
+(2560×1440) capturada no Electron de verdade (via CDP, já que
 `desktopCapturer` não existe fora do Electron) e recebida — track de
 vídeo íntegra, mesma resolução — por um segundo peer completamente
-independente.
+independente. **Sem limite de compartilhamentos simultâneos por sala**
+desde a revisão pós-fatia-6 (ver "Limites do mesh" acima) — `voiceStore.ts`
+já renderiza um `<video>` por peer que está compartilhando
+(`remoteScreenStreams` sempre foi um mapa por peer, não um único stream),
+então múltiplas telas simultâneas não precisaram de nenhuma mudança de UI,
+só a remoção do bloqueio no servidor.
 
 **Ainda não implementado (tela)**: áudio do sistema junto com a
-transmissão (nice-to-have já documentado acima), cap/exclusividade
-refletido na UI de forma mais clara (hoje só a mensagem de erro avisa).
+transmissão (nice-to-have já documentado acima).
 
 ## Fluxo de vídeo
 
@@ -219,24 +224,21 @@ getDisplayMedia() padrão (Electron 22+) — preferível ao getUserMedia
 ScreenTrack adicionada à(s) peer connection(s) mesh já existentes do canal
    │
    ▼
-Renegociação (perfect negotiation) — servidor recusa se já houver
-outro compartilhamento ativo no canal (limite de 1 por vez)
+Renegociação (perfect negotiation) — sem limite de compartilhamentos
+simultâneos por sala (ver "Limites do mesh" acima)
    │
    ▼
-Parar compartilhamento → remove track → renegocia
+Parar compartilhamento → replaceTrack(null) → sem renegociar de novo
 ```
 
 Nunca passa pelo WebSocket. Áudio do sistema junto com a tela: *nice-to-have* pós-MVP (suporte varia por SO).
 
 **Implementado (lado servidor)**: `screen_share:start`/`screen_share:stop` no
-mesmo `VoiceChannel`, com metadata `screen_sharing` no Presence. Diferente
-do cap de vídeo (até 4 ao mesmo tempo), é um recurso exclusivo — só um
-compartilhamento por sala. `screen_share:start` responde
-`{:error, %{reason: "screen_share_in_use"}}` se outra pessoa já está
-compartilhando; é idempotente para quem já é o compartilhador atual; parar
-libera a sala para qualquer outro membro. A parte client-side (captura de
-verdade, `desktopCapturer`, renegociação) segue dependendo do Electron —
-FASE 11.
+mesmo `VoiceChannel`, com metadata `screen_sharing` no Presence — sempre
+respondem `:ok`, sem checagem de exclusividade (removida pós-fatia-6 da
+FASE 11, ver "Limites do mesh" acima). A parte client-side (captura de
+verdade, `desktopCapturer`, renegociação) está implementada desde a FASE
+11 fatia 5.
 
 ## Fluxo do Go Live (FASE 9)
 

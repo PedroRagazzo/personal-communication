@@ -20,11 +20,14 @@ defmodule ToraDosBurroWeb.VoiceChannel do
   renegociação da nova track.
 
   Compartilhamento de tela (FASE 8) também reaproveita esse canal — nunca
-  passa pelo WebSocket, só a `ScreenTrack` em si via WebRTC. Diferente do
-  vídeo (até `@max_video_participants` ao mesmo tempo), é um recurso
-  exclusivo: só **um** compartilhamento ativo por sala. `screen_share:start`
-  é idempotente para quem já está compartilhando, mas recusa qualquer outra
-  pessoa enquanto isso.
+  passa pelo WebSocket, só a `ScreenTrack` em si via WebRTC.
+  `screen_share:start`/`stop` são só metadata (`screen_sharing` no
+  Presence) e sempre têm sucesso — **sem limite de compartilhamentos
+  simultâneos por sala**, decisão deliberada (servidor único, ~20 pessoas,
+  não público — ver `docs/roadmap.md`) mesmo sabendo que cada
+  compartilhamento simultâneo é mais uma track de vídeo que todo mundo na
+  chamada precisa decodificar (mesh, não SFU); diferente do vídeo, que
+  mantém `@max_video_participants` por esse exato motivo.
   """
 
   use ToraDosBurroWeb, :channel
@@ -117,18 +120,8 @@ defmodule ToraDosBurroWeb.VoiceChannel do
 
   def handle_in("screen_share:start", _params, socket) do
     user_id = socket.assigns.current_user.id
-
-    case current_sharer(socket) do
-      nil ->
-        {:ok, _} = Presence.update(socket, user_id, &Map.put(&1, :screen_sharing, true))
-        {:reply, :ok, socket}
-
-      ^user_id ->
-        {:reply, :ok, socket}
-
-      _other_user_id ->
-        {:reply, {:error, %{reason: "screen_share_in_use"}}, socket}
-    end
+    {:ok, _} = Presence.update(socket, user_id, &Map.put(&1, :screen_sharing, true))
+    {:reply, :ok, socket}
   end
 
   def handle_in("screen_share:stop", _params, socket) do
@@ -152,13 +145,5 @@ defmodule ToraDosBurroWeb.VoiceChannel do
       %{metas: [%{video: true} | _]} -> true
       _ -> false
     end
-  end
-
-  defp current_sharer(socket) do
-    socket
-    |> Presence.list()
-    |> Enum.find_value(fn {user_id, %{metas: [meta | _]}} ->
-      if meta[:screen_sharing] == true, do: user_id
-    end)
   end
 end

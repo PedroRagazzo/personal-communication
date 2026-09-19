@@ -252,11 +252,15 @@ defmodule ToraDosBurroWeb.VoiceChannelTest do
                        %{joins: %{^owner_id => %{metas: [%{screen_sharing: true}]}}}
     end
 
-    test "segunda pessoa não consegue compartilhar enquanto a primeira ainda está", %{
-      owner: owner,
-      other: other,
-      voice_channel: channel
-    } do
+    test "sem limite: duas pessoas conseguem compartilhar ao mesmo tempo, e as duas aparecem na presença",
+         %{
+           owner: owner,
+           other: other,
+           voice_channel: channel
+         } do
+      owner_id = owner.id
+      other_id = other.id
+
       owner_socket = connect_as(owner)
       {:ok, _, owner_voice} = subscribe_and_join(owner_socket, "voice:#{channel.id}", %{})
 
@@ -266,8 +270,14 @@ defmodule ToraDosBurroWeb.VoiceChannelTest do
       ref = push(owner_voice, "screen_share:start", %{})
       assert_reply ref, :ok
 
+      assert_broadcast "presence_diff",
+                       %{joins: %{^owner_id => %{metas: [%{screen_sharing: true}]}}}
+
       ref2 = push(other_voice, "screen_share:start", %{})
-      assert_reply ref2, :error, %{reason: "screen_share_in_use"}
+      assert_reply ref2, :ok
+
+      assert_broadcast "presence_diff",
+                       %{joins: %{^other_id => %{metas: [%{screen_sharing: true}]}}}
     end
 
     test "reenviar screen_share:start pra quem já está compartilhando é idempotente", %{
@@ -288,11 +298,13 @@ defmodule ToraDosBurroWeb.VoiceChannelTest do
       assert_reply ref2, :ok
     end
 
-    test "parar libera para outra pessoa compartilhar", %{
+    test "parar de compartilhar atualiza a presença sem afetar quem mais está compartilhando", %{
       owner: owner,
       other: other,
       voice_channel: channel
     } do
+      owner_id = owner.id
+
       owner_socket = connect_as(owner)
       {:ok, _, owner_voice} = subscribe_and_join(owner_socket, "voice:#{channel.id}", %{})
 
@@ -302,11 +314,14 @@ defmodule ToraDosBurroWeb.VoiceChannelTest do
       ref = push(owner_voice, "screen_share:start", %{})
       assert_reply ref, :ok
 
-      ref2 = push(owner_voice, "screen_share:stop", %{})
+      ref2 = push(other_voice, "screen_share:start", %{})
       assert_reply ref2, :ok
 
-      ref3 = push(other_voice, "screen_share:start", %{})
+      ref3 = push(owner_voice, "screen_share:stop", %{})
       assert_reply ref3, :ok
+
+      assert_broadcast "presence_diff",
+                       %{joins: %{^owner_id => %{metas: [%{screen_sharing: false}]}}}
     end
   end
 end
