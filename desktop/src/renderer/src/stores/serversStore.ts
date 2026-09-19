@@ -13,6 +13,11 @@ interface ServersState {
   loadServers: (accessToken: string) => Promise<void>
   selectServer: (accessToken: string, serverId: string) => Promise<void>
   selectChannel: (channelId: string) => void
+  createChannel: (
+    accessToken: string,
+    name: string,
+    type: 'guild_text' | 'guild_voice'
+  ) => Promise<boolean>
   reset: () => void
 }
 
@@ -66,6 +71,30 @@ export const useServersStore = create<ServersState>((set, get) => ({
   },
 
   selectChannel: (channelId) => set({ selectedChannelId: channelId }),
+
+  createChannel: async (accessToken, name, type) => {
+    const serverId = get().selectedServerId
+    if (!serverId) return false
+
+    try {
+      const channel = await api.createChannel(accessToken, serverId, { name, type })
+      // Servidor não reordena por nome — novo canal só entra no fim da
+      // lista, igual ao `position` default (0) que todo canal ganha por
+      // enquanto (reordenar fica pra uma fatia futura).
+      set((state) => ({ channels: [...state.channels, channel], selectedChannelId: channel.id, error: null }))
+      return true
+    } catch (err) {
+      set({
+        error:
+          err instanceof api.ApiError && err.status === 403
+            ? 'você não tem permissão para criar canais nesse servidor'
+            : err instanceof Error
+              ? err.message
+              : 'erro desconhecido'
+      })
+      return false
+    }
+  },
 
   reset: () => set(initialState)
 }))

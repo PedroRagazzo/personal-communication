@@ -132,6 +132,18 @@ export function listChannels(accessToken: string, serverId: string): Promise<Cha
   }).then((res) => res.channels)
 }
 
+export function createChannel(
+  accessToken: string,
+  serverId: string,
+  params: { name: string; type: 'guild_text' | 'guild_voice' }
+): Promise<ChannelSummary> {
+  return request<{ channel: ChannelSummary }>(`/servers/${serverId}/channels`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${accessToken}` },
+    body: JSON.stringify({ channel: params })
+  }).then((res) => res.channel)
+}
+
 export interface ServerMember {
   id: string
   nickname: string | null

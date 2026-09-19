@@ -19,9 +19,11 @@ export function HomePage() {
   const channels = useServersStore((s) => s.channels)
   const members = useServersStore((s) => s.members)
   const selectedChannelId = useServersStore((s) => s.selectedChannelId)
+  const serversError = useServersStore((s) => s.error)
   const loadServers = useServersStore((s) => s.loadServers)
   const selectServer = useServersStore((s) => s.selectServer)
   const selectChannel = useServersStore((s) => s.selectChannel)
+  const createChannel = useServersStore((s) => s.createChannel)
 
   useEffect(() => {
     if (accessToken) loadServers(accessToken)
@@ -43,7 +45,9 @@ export function HomePage() {
         server={selectedServer}
         channels={channels}
         selectedChannelId={selectedChannelId}
+        error={serversError}
         onSelect={selectChannel}
+        onCreate={(name, type) => createChannel(accessToken, name, type)}
       />
       <div className="flex flex-1 flex-col">
         <header className="flex items-center justify-between border-b border-neutral-800 px-4 py-3">
