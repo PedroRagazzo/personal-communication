@@ -56,14 +56,18 @@ retransmitidos via `broadcast_from!` — cada cliente filtra pelo `to`. Sem
 tabela nova: é tudo efêmero em Presence, como o `database.md` já previa.
 
 **Ainda não implementado** (depende do cliente Electron, FASE 11): as peer
-connections WebRTC de verdade, perfect negotiation, STUN/coturn, e o cap de
-4 participantes com vídeo (só se aplica quando vídeo existir, FASE 7 — o
-cap de ~8 só-áudio desta fase é a recomendação acima, não um limite
-travado no código ainda).
+connections WebRTC de verdade, perfect negotiation, STUN/coturn.
 
 ## Fluxo de vídeo
 
-Ligar câmera = adicionar `VideoTrack` às peer connections existentes do canal + renegociar. Seleção de dispositivo/resolução/FPS no cliente. **Escopo limitado a canais de voz de servidor no MVP** (não chamadas em DM — quando Amigos/DM entrar pós-MVP, reaproveita o mesmo mecanismo). Cap de 4 participantes com vídeo aplicado no servidor no momento de **adicionar a track**, não só no join do canal.
+Ligar câmera = adicionar `VideoTrack` às peer connections existentes do canal + renegociar (reaproveita o relay de SDP/ICE da FASE 6 — mesmo tópico `voice:{channel_id}`, não é um canal novo). Seleção de dispositivo/resolução/FPS no cliente. **Escopo limitado a canais de voz de servidor no MVP** (não chamadas em DM — quando Amigos/DM entrar pós-MVP, reaproveita o mesmo mecanismo).
+
+**Implementado**: eventos `video:enable`/`video:disable` no `VoiceChannel`,
+com metadata `video` no Presence. Cap de 4 participantes com vídeo aplicado
+no servidor no momento de **habilitar** (não só no join do canal) —
+`video:enable` responde `{:error, %{reason: "video_limit_reached"}}` quando
+a sala já tem 4 com vídeo; reenviar `video:enable` para quem já está entre
+os 4 é idempotente (não conta em dobro contra o próprio limite).
 
 ## Fluxo de compartilhamento de tela
 

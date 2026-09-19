@@ -20,6 +20,7 @@ defmodule ToraDosBurroWeb.VoiceChannelTest do
       owner: owner,
       other: other,
       stranger: stranger,
+      server: server,
       voice_channel: voice_channel,
       text_channel: text_channel
     }
@@ -142,5 +143,91 @@ defmodule ToraDosBurroWeb.VoiceChannelTest do
     close(owner_voice)
 
     assert_broadcast "presence_diff", %{leaves: %{^owner_id => _}}
+  end
+
+  describe "vídeo (FASE 7)" do
+    test "habilitar e desabilitar vídeo atualiza a metadata de presença", %{
+      owner: owner,
+      other: other,
+      voice_channel: channel
+    } do
+      owner_id = owner.id
+
+      owner_socket = connect_as(owner)
+      {:ok, _, owner_voice} = subscribe_and_join(owner_socket, "voice:#{channel.id}", %{})
+
+      other_socket = connect_as(other)
+      {:ok, _, _other_voice} = subscribe_and_join(other_socket, "voice:#{channel.id}", %{})
+
+      ref = push(owner_voice, "video:enable", %{})
+      assert_reply ref, :ok
+      assert_broadcast "presence_diff", %{joins: %{^owner_id => %{metas: [%{video: true}]}}}
+
+      ref2 = push(owner_voice, "video:disable", %{})
+      assert_reply ref2, :ok
+      assert_broadcast "presence_diff", %{joins: %{^owner_id => %{metas: [%{video: false}]}}}
+    end
+
+    test "quinto participante não consegue habilitar vídeo quando já há 4", %{
+      owner: owner,
+      server: server,
+      voice_channel: channel
+    } do
+      members =
+        for suffix <- ["m1", "m2", "m3"] do
+          {:ok, user} = register("videocap#{suffix}")
+          {:ok, _} = Servers.join_server(server, user)
+          user
+        end
+
+      voices =
+        Enum.map([owner | members], fn user ->
+          socket = connect_as(user)
+          {:ok, _, voice} = subscribe_and_join(socket, "voice:#{channel.id}", %{})
+          voice
+        end)
+
+      Enum.each(voices, fn voice ->
+        ref = push(voice, "video:enable", %{})
+        assert_reply ref, :ok
+      end)
+
+      {:ok, fifth_user} = register("videocapm4")
+      {:ok, _} = Servers.join_server(server, fifth_user)
+      fifth_socket = connect_as(fifth_user)
+      {:ok, _, fifth_voice} = subscribe_and_join(fifth_socket, "voice:#{channel.id}", %{})
+
+      ref = push(fifth_voice, "video:enable", %{})
+      assert_reply ref, :error, %{reason: "video_limit_reached"}
+    end
+
+    test "reenviar video:enable pra quem já tem vídeo não conta em dobro (idempotente)", %{
+      owner: owner,
+      server: server,
+      voice_channel: channel
+    } do
+      members =
+        for suffix <- ["idm1", "idm2", "idm3"] do
+          {:ok, user} = register("videoidem#{suffix}")
+          {:ok, _} = Servers.join_server(server, user)
+          user
+        end
+
+      voices =
+        Enum.map([owner | members], fn user ->
+          socket = connect_as(user)
+          {:ok, _, voice} = subscribe_and_join(socket, "voice:#{channel.id}", %{})
+          voice
+        end)
+
+      Enum.each(voices, fn voice ->
+        ref = push(voice, "video:enable", %{})
+        assert_reply ref, :ok
+      end)
+
+      [owner_voice | _] = voices
+      ref = push(owner_voice, "video:enable", %{})
+      assert_reply ref, :ok
+    end
   end
 end
