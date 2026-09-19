@@ -66,6 +66,23 @@ if config_env() == :prod do
 
   config :tora_dos_burro, ToraDosBurro.Guardian, secret_key: guardian_secret_key
 
+  livekit_api_key =
+    System.get_env("LIVEKIT_API_KEY") ||
+      raise "environment variable LIVEKIT_API_KEY is missing"
+
+  livekit_api_secret =
+    System.get_env("LIVEKIT_API_SECRET") ||
+      raise "environment variable LIVEKIT_API_SECRET is missing"
+
+  livekit_url =
+    System.get_env("LIVEKIT_URL") ||
+      raise "environment variable LIVEKIT_URL is missing (ex.: wss://livekit.example.com)"
+
+  config :tora_dos_burro, ToraDosBurro.GoLive.LiveKitToken,
+    api_key: livekit_api_key,
+    api_secret: livekit_api_secret,
+    url: livekit_url
+
   config :tora_dos_burro, ToraDosBurroWeb.Endpoint,
     url: [host: host, port: 443, scheme: "https"],
     http: [

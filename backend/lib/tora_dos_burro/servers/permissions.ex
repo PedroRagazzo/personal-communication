@@ -20,7 +20,8 @@ defmodule ToraDosBurro.Servers.Permissions do
     manage_roles: 0x100,
     manage_channels: 0x200,
     manage_server: 0x400,
-    administrator: 0x800
+    administrator: 0x800,
+    stream: 0x1000
   ]
 
   @doc "Lista de nomes de permissão válidos."
@@ -33,7 +34,7 @@ defmodule ToraDosBurro.Servers.Permissions do
 
   @doc "Permissões padrão de um membro comum (o role `@everyone` do servidor)."
   def default_member_permissions do
-    combine([:view_channels, :send_messages, :connect, :speak, :create_invite])
+    combine([:view_channels, :send_messages, :connect, :speak, :create_invite, :stream])
   end
 
   @doc "Verifica se `bitfield` contém `permission` (ou é administrator)."

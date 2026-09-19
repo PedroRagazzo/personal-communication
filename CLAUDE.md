@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project overview
 
-TORA DOS BURRO is a Discord-style real-time communication platform: servers/channels, roles/permissions, real-time chat, voice/video/screen-share over WebRTC, and (planned) Go Live. The backend (Elixir/Phoenix) is the only part implemented so far — MVP backend (FASES 0-8) is complete. A React+Electron desktop client, then Rust/C++/Python media services, are planned for later phases and don't exist yet beyond empty placeholder directories (`desktop/`, `rust/`, `cpp/`, `python/`).
+TORA DOS BURRO is a Discord-style real-time communication platform: servers/channels, roles/permissions, real-time chat, voice/video/screen-share over WebRTC, and Go Live (via LiveKit). The backend (Elixir/Phoenix) is the only part implemented so far — MVP backend (FASES 0-8) plus FASE 9 (Go Live) are complete. A React+Electron desktop client, then Rust/C++/Python media services, are planned for later phases and don't exist yet beyond empty placeholder directories (`desktop/`, `rust/`, `cpp/`, `python/`).
 
 Read `README.md` first for current phase status, then `docs/*.md` (`architecture`, `database`, `api`, `realtime`, `media`, `security`, `roadmap`) — these are living design docs kept in sync with what's actually implemented, with explicit "Implementado" / "Ainda não implementado" notes where a feature is server-side-only so far.
 
@@ -41,7 +41,7 @@ mix ecto.reset                               # drop + recreate + migrate + seed
 cmd /c '"C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvarsall.bat" x64 && set' | ForEach-Object { if ($_ -match '^([^=]+)=(.*)$') { [Environment]::SetEnvironmentVariable($matches[1], $matches[2], 'Process') } }
 ```
 
-Local infra (Postgres/Redis/coturn/MinIO) is `docker compose up -d` from the repo root. `backend/config/{dev,test}.exs` expect a `tora`/`tora_dev_password` role reachable at `localhost:5432` either way — if running Postgres natively instead of Docker, create the role manually: `CREATE ROLE tora WITH LOGIN SUPERUSER PASSWORD 'tora_dev_password';`.
+Local infra (Postgres/Redis/coturn/MinIO/LiveKit) is `docker compose up -d` from the repo root. `backend/config/{dev,test}.exs` expect a `tora`/`tora_dev_password` role reachable at `localhost:5432` either way — if running Postgres natively instead of Docker, create the role manually: `CREATE ROLE tora WITH LOGIN SUPERUSER PASSWORD 'tora_dev_password';`. LiveKit's dev config uses its own fixed `--dev` credentials (`devkey`/`secret`, already in `backend/config/dev.exs`) — prod reads `LIVEKIT_API_KEY`/`LIVEKIT_API_SECRET`/`LIVEKIT_URL` instead (`backend/config/runtime.exs`).
 
 See `backend/AGENTS.md` for generic Phoenix/Elixir/Ecto/Mix conventions (prefer `Req` over `:httpoison`/`:tesla`, changeset gotchas, test process-cleanup patterns) — those apply on top of everything below and aren't repeated here.
 
@@ -50,7 +50,7 @@ See `backend/AGENTS.md` for generic Phoenix/Elixir/Ecto/Mix conventions (prefer 
 ### Three planes
 
 - **Control Plane** (`backend/lib/tora_dos_burro/` contexts + `backend/lib/tora_dos_burro_web/` controllers/channels): auth, users, servers, roles/permissions, channels, messages, presence, WebRTC *signaling only*.
-- **Media Plane**: real audio/video/screen-share bytes, via WebRTC (DTLS-SRTP) — **never** touches the Phoenix WebSocket. Phoenix Channels only relay SDP offers/answers and ICE candidates as opaque JSON; the actual peer connections are client-side and don't exist yet (they land with the Electron client in a later phase), so the voice/video/screen-share Channel code is currently a signaling/authorization/Presence skeleton with nothing driving it end-to-end.
+- **Media Plane**: real audio/video/screen-share bytes, via WebRTC (DTLS-SRTP) — **never** touches the Phoenix WebSocket. Phoenix Channels only relay SDP offers/answers and ICE candidates as opaque JSON (or, for Go Live, just hand out a LiveKit token — no SDP/ICE relay at all, since the SFU handles that); the actual peer/SFU connections are client-side and don't exist yet (they land with the Electron client in a later phase), so the voice/video/screen-share/Go-Live Channel code is currently a signaling/authorization/Presence skeleton with nothing driving it end-to-end.
 - **Data Plane**: PostgreSQL (`Ecto`/`Repo`) for durable state, `Phoenix.Presence` for all ephemeral realtime state (below), object storage (planned, MinIO/S3) for attachments.
 
 ### Contexts (`backend/lib/tora_dos_burro/`)
@@ -61,13 +61,15 @@ See `backend/AGENTS.md` for generic Phoenix/Elixir/Ecto/Mix conventions (prefer 
 - `Servers.Permissions` — the permission bitfield (`view_channels`, `send_messages`, `manage_roles`, `administrator`, etc. — see the module for the full flag list and hex values).
 - `Channels` — channels, categories, `permission_overwrites`. Owns the Discord-equivalent per-channel permission resolution in `channel_permissions/3`/`authorize/3`: server base → `@everyone` overwrite → other role overwrites → member-specific overwrite → `administrator` bypasses overwrites entirely → server owner always passes regardless of role. This exact order is load-bearing.
 - `Chat` — messages, reactions. Ordering/pagination uses a monotonic `seq` (bigserial) column, **not** `inserted_at`/id — timestamps aren't a reliable order key here (UUID PKs aren't sortable, and OS clock resolution, observed concretely on Windows, isn't fine-grained enough to break same-millisecond ties). Don't revert this to timestamp-based ordering.
+- `GoLive` — issues LiveKit access tokens (`GoLive.LiveKitToken`, hand-rolled JWT via `joken`, not the stale/partial third-party `livekit` hex package). No Room Service API calls — a LiveKit room auto-creates on first authenticated join. `start_stream/2` (needs `:stream`, publisher token) and `watch_stream/2` (needs `:connect`, subscriber-only token) both delegate to `Channels.authorize/3` — same permission machinery as everything else, nothing new.
 
 ### Realtime (`backend/lib/tora_dos_burro_web/channels/`)
 
 - `UserSocket` authenticates via a Guardian token passed as a **connect param** (`?token=`), not a header — browsers can't set custom headers on the WS handshake.
 - `ChatChannel` (topic `channel:{id}`) — text chat: `message:create/update/delete/reaction`, `typing:start/stop`. Mutations happen over the socket, not REST; REST only covers CRUD-ish resources and history pagination (`docs/api.md`).
 - `VoiceChannel` (topic `voice:{id}`) — voice/video/screen-share signaling: `sdp:offer`/`sdp:answer`/`ice:candidate` relay (broadcast + client-side `to`/`from` filtering — mesh topology, fine at small scale), `state:update` (mute/deafen), `video:enable/disable`, `screen_share:start/stop`. Limits are server-enforced, never client-trusted: max 4 concurrent video participants per channel, max 1 active screen share per channel.
-- `ToraDosBurroWeb.Presence` backs **all** ephemeral state (who's in a voice room, muted/deafened/video/screen-share flags) — deliberately never persisted to Postgres; it's session state, not history.
+- `GoLiveChannel` (topic `live:{id}`, FASE 9) — Go Live via LiveKit (SFU), channel must be `guild_voice`. `join` returns a subscriber-only token; `golive:start` elevates to a publisher token (checked at that point, not just at join — same pattern as `video:enable`); `golive:stop` reverts. Deliberately **no** cap on simultaneous streamers per room, unlike FASE 8's screen-share — that limit exists because of mesh fan-out cost, which doesn't apply once an SFU is involved, so don't add one here without a real reason.
+- `ToraDosBurroWeb.Presence` backs **all** ephemeral state (who's in a voice room, muted/deafened/video/screen-share/live flags) — deliberately never persisted to Postgres; it's session state, not history.
 - Every `join/3` re-authenticates (Guardian) and re-authorizes (roles + `permission_overwrites`) — never trust a client-asserted permission.
 
 ### IDs

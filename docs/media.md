@@ -105,26 +105,30 @@ libera a sala para qualquer outro membro. A parte client-side (captura de
 verdade, `desktopCapturer`, renegociação) segue dependendo do Electron —
 FASE 11.
 
-## Fluxo do Go Live (pós-MVP, FASE 9)
+## Fluxo do Go Live (FASE 9)
 
 Mesh não escala para um-para-muitos — aqui um SFU é obrigatório.
 
 ```
-Streamer → Capture → Encoder → SFU (adotado, não construído do zero) → Viewers (N)
+Streamer → Capture → Encoder → SFU (LiveKit) → Viewers (N)
 ```
 
 **Decisão de build-vs-adopt:** construir um SFU do zero (bandwidth estimation, jitter buffer, simulcast, congestion control) sem necessidade medida é exatamente o anti-padrão que a regra "Rust só depois do MVP, com necessidade real" existe para evitar. Adotar um SFU open-source pronto é a leitura correta dessa regra. O trabalho de Rust da FASE 12 fica **redirecionado, não cancelado**: passa a mirar serviços ao lado do SFU adotado (workers de gravação/composição, pipelines de DSP consumindo tracks via SDK do SFU) — escalar para "construir/fork um SFU em Rust" só se métricas concretas justificarem.
 
-**Decisão em aberto — revisitar no início da FASE 9** (fora do MVP, não travada agora):
+**Decisão de SFU: LiveKit** (não mediasoup). A recomendação preliminar do FASE 0 (`media.md` original) apontava mediasoup pela trajetória Rust de longo prazo — revertida no kickoff da FASE 9 depois de escopar o esforço de integração de verdade: mediasoup é só o engine (C++) + control plane, sem camada de sinalização/sala/protocolo pronta, então adotá-lo significaria **construir um servidor de mídia inteiro do zero** — exatamente o microsserviço prematuro que a Regra 10 do projeto proíbe. LiveKit já é uma plataforma completa (SFU + gestão de sala + SDKs), o que reduz drasticamente o que precisa ser construído agora. Janus segue fora do shortlist (o diferencial dele é ponte SIP/RTSP, que este projeto não precisa).
 
-| Opção | A favor | Contra |
-|---|---|---|
-| **mediasoup** | Engine de baixo nível (C++ + control plane), controle total. Tem crate Rust oficial mantido (`mediasoup-rust`, ~0.27 em ago/2026) como control plane alternativo ao Node — ponte natural para a ambição de Rust da FASE 12 | Mais complexidade operacional |
-| **LiveKit** | Plataforma completa (SFU em Go + SDKs + gravação/egress + gestão de sala pronta). Mais rápido para lançar | Núcleo em Go diverge da trajetória Rust do projeto; SDK Rust é só para *consumir*, não estender o servidor |
+**Implementado (lado servidor, FASE 9):**
 
-Janus foi descartado do shortlist: seu diferencial é ponte SIP/RTSP, que este projeto não precisa.
+- `ToraDosBurro.GoLive` (contexto) + `ToraDosBurroWeb.GoLiveChannel` (tópico `live:{channel_id}`, canal precisa ser `guild_voice`, igual à voz).
+- Nova permissão `:stream` (bitfield), padrão para membros comuns — igual ao Discord real, onde "Stream" também é uma permissão base de `@everyone`.
+- `join` autoriza `:connect` e devolve um token *subscriber-only* (`canPublish: false`); evento `golive:start` eleva para um token *publisher*, autorizando `:stream` nesse momento (não só no join) — mesmo padrão que `video:enable` já usa na FASE 7. `golive:stop` volta a `live: false`.
+- **Sem limite de "1 streamer por sala"**, diferente do compartilhamento de tela da FASE 8: aquele limite existe por causa do mesh (cada peer a mais decodificando é custo real); com um SFU, múltiplos publishers na mesma sala é uso normal — recriar aquele limite aqui seria uma restrição artificial, sem motivo técnico.
+- Quem está ao vivo/assistindo é só `Phoenix.Presence` (`live: true/false` na metadata), mesmo padrão efêmero da voz — nunca persistido.
+- **Geração de token via `joken` (não o pacote hex `livekit`)**: o único wrapper Elixir para LiveKit no hex.pm é pequeno, mantido por terceiro (não a LiveKit), cobre só ~60-70% da API e não teve release recente — arriscado demais para confiar às cegas. A forma exata do JWT (claims `iss`/`sub`/`exp`/`nbf` + grant `video` com `room`/`roomJoin`/`canPublish`/`canSubscribe`/`canPublishData`) foi verificada direto na documentação oficial (`docs.livekit.io/home/server/generating-tokens`) e é gerada à mão em `ToraDosBurro.GoLive.LiveKitToken`, assinada com `joken` (`~> 2.7`, dependência madura e amplamente usada — sem relação com o LiveKit em si, só assina JWT genérico).
+- **Sem chamadas à Room Service API** (`CreateRoom` etc.): uma sala do LiveKit é criada automaticamente no primeiro join autenticado com token válido (`roomJoin: true`), o que é suficiente para este escopo.
+- `docker-compose.yml` ganhou um serviço `livekit` (`livekit-server --dev`, credenciais fixas `devkey`/`secret` — nunca usar `--dev` em produção).
 
-**Recomendação preliminar:** mediasoup, por alinhar com a trajetória Rust de longo prazo — mas LiveKit é a opção pragmática se velocidade de lançamento pesar mais nesse momento. Decisão final a confirmar com o time no kickoff da FASE 9.
+**Verificado**: `mix test` (contexto + Channel, incluindo forma exata do JWT decodificado) e um cliente WebSocket real (Node + `phoenix`) contra `mix phx.server` rodando de verdade — join, `golive:start`/`golive:stop`, `presence_diff`, e dois streamers simultâneos na mesma sala. **Não verificável neste ambiente** (sem Docker, mesma limitação do MinIO/FASE 4): a transmissão de mídia de verdade contra um LiveKit rodando, e o lado cliente (conectar ao LiveKit, publicar/assistir tracks) — chega só com o Electron (FASE 11).
 
 ## Comunicação Elixir ↔ Rust ↔ C++ ↔ Python (contrato para quando essas fases chegarem)
 

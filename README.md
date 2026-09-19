@@ -4,7 +4,7 @@ Plataforma de comunicação em tempo real (estilo Discord): servidores/comunidad
 
 ## Status atual
 
-**MVP (backend) concluído — FASES 0 a 8, todas verificadas de ponta a ponta.** 68 testes passando (`cd backend && mix test`).
+**MVP (backend) concluído — FASES 0 a 8 — mais a FASE 9 (Go Live) como fast-follow, todas verificadas de ponta a ponta.** 80 testes passando (`cd backend && mix test`).
 
 | Fase | O quê | Release |
 |---|---|---|
@@ -17,10 +17,11 @@ Plataforma de comunicação em tempo real (estilo Discord): servidores/comunidad
 | 6 | Voz — sinalização (relay SDP/ICE + Presence) | `v0.6.0` |
 | 7 | Vídeo (cap de 4 participantes por sala) | `v0.7.0` |
 | 8 | Compartilhamento de tela (1 por sala) | `v0.8.0` |
+| 9 | Go Live — sinalização (tokens LiveKit + Presence, SFU: LiveKit) | `v0.9.0` |
 
-**O qualificador "(backend)" importa.** FASES 6–8 implementaram toda a sinalização/autorização/Presence do lado do servidor para voz, vídeo e tela — mas as peer connections WebRTC de verdade, perfect negotiation, STUN/coturn e `desktopCapturer` são client-side e só chegam com o Electron (FASE 11). Sem um cliente de verdade ainda, ninguém liga microfone/câmera/tela — só o "esqueleto" que torna isso possível está pronto e testado.
+**O qualificador "(backend)" importa.** FASES 6–9 implementaram toda a sinalização/autorização/Presence do lado do servidor para voz, vídeo, tela e Go Live — mas as peer connections WebRTC de verdade, perfect negotiation, STUN/coturn, `desktopCapturer` e a conexão real com o LiveKit são client-side e só chegam com o Electron (FASE 11). Sem um cliente de verdade ainda, ninguém liga microfone/câmera/tela/transmissão — só o "esqueleto" que torna isso possível está pronto e testado (inclusive com cliente WebSocket real, não só a suíte automatizada).
 
-**Pendente antes de um MVP completo de ponta a ponta**: anexos leves (FASE 4 — precisa de Docker/MinIO rodando), Amigos/DM (fast-follow fora do MVP formal, schema já pronto), e a própria FASE 11. Confirmação de email e recuperação de senha ficam para uma fatia futura da FASE 2 (dependem de escolher um mailer).
+**Pendente antes de um MVP completo de ponta a ponta**: anexos leves (FASE 4 — precisa de Docker/MinIO rodando), Amigos/DM (fast-follow fora do MVP formal, schema já pronto), e a própria FASE 11. Confirmação de email e recuperação de senha ficam para uma fatia futura da FASE 2 (dependem de escolher um mailer). LiveKit em si também precisa de Docker para rodar localmente — não verificável neste ambiente, mesma limitação do MinIO.
 
 Leia primeiro:
 
@@ -98,10 +99,9 @@ cmd /c '"C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Bu
 
 ## Próximos passos
 
-Fim do MVP (backend) — algumas direções possíveis, a decidir com quem está lendo isto:
+Fim do MVP (backend) + FASE 9 — algumas direções possíveis, a decidir com quem está lendo isto:
 
-- **FASE 9 — Go Live** (decisão em aberto: mediasoup vs LiveKit, ver `docs/media.md`)
-- **FASE 11 — Cliente Electron** (é o que faz voz/vídeo/tela funcionarem de verdade, ligando no que já existe)
+- **FASE 11 — Cliente Electron** (é o que faz voz/vídeo/tela/Go Live funcionarem de verdade, ligando no que já existe)
 - **Anexos leves** (fecha a FASE 4, precisa de `docker compose up -d`)
 - **Amigos/DM** (fast-follow, schema já pronto desde a FASE 3/4)
 - Ou seguir a ordem original: FASE 10 (arquivos, hardening), 12–18

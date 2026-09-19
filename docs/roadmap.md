@@ -14,7 +14,7 @@ FASE 7  → Vídeo (câmera, MediaSession, cap de 4 participantes)         [CONC
 FASE 8  → Compartilhamento de tela (desktopCapturer, 1 por vez)        [CONCLUÍDA — v0.8.0]
 ──────────────────────────────────────────── fim do MVP (backend) ────
         → Amigos / Mensagens Diretas (fast-follow — schema já pronto na FASE 3/4)
-FASE 9  → Go Live (decisão de SFU em aberto — ver media.md)
+FASE 9  → Go Live (SFU: LiveKit — ver media.md)                        [CONCLUÍDA (backend) — v0.9.0]
 FASE 10 → Arquivos — gestão avançada (redefinida, ver nota abaixo)
 FASE 11 → Cliente Electron (empacotamento, distribuição)
 FASE 12 → Rust (media services — redirecionado pela adoção de SFU na FASE 9, ver media.md)
@@ -42,7 +42,7 @@ precisa de Docker/MinIO), Amigos/DM (fast-follow abaixo), e a FASE 11 em si.
 
 1. **Anexos de arquivo**: o documento original lista "Uploads" como FASE 10 (depois do Go Live). Anexos **leves** (imagem/arquivo pequeno, com validação) entram na **FASE 4** — chat sem nenhum anexo não é utilizável, e isso evita que a FASE 4 fique "funcional" apenas parcialmente. A FASE 10 passa a significar **gestão avançada de arquivos** (arquivos grandes, upload retomável, cotas, CDN) — um endurecimento pós-MVP, não a introdução do recurso básico.
 2. **Amigos/DM**: não aparecia como fase explícita no documento original (schema de `server`/`channel` sugeria isso implicitamente). Fica registrado aqui como **fast-follow logo após a FASE 8** (fora do MVP formal, mas antes da FASE 9), já que o schema (`friend_requests`, `channels.type = dm/group_dm`, `channel_recipients`) é desenhado desde a FASE 3/4 para suportar isso sem retrabalho.
-3. **FASE 9 (Go Live)** carrega uma decisão em aberto sobre qual SFU adotar (mediasoup vs LiveKit) — ver `media.md`. Não travada agora de propósito, por estar fora do MVP.
+3. **FASE 9 (Go Live)**: decisão de SFU resolvida no kickoff da fase — **LiveKit**, não mediasoup (a recomendação preliminar original) — ver `media.md` para o raciocínio completo. Backend (autorização + emissão de token) implementado e verificado; o lado cliente/mídia real depende do LiveKit rodando (sem Docker neste ambiente) e do Electron (FASE 11).
 
 ## Processo de desenvolvimento (regras do projeto, mantidas)
 

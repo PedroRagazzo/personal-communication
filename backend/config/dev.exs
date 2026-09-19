@@ -61,6 +61,14 @@ config :tora_dos_burro, dev_routes: true
 config :tora_dos_burro, ToraDosBurro.Guardian,
   secret_key: "pufN052OsVcTVbvaXElKSZXkV0LwMAbUkhL1SWrql8DTMRDuQHGNo_51syCNrIpN"
 
+# LiveKit (FASE 9, Go Live) — credenciais padrão do modo `--dev` do próprio
+# livekit-server (ver docker-compose.yml), nunca usadas em produção
+# (runtime.exs lê de LIVEKIT_API_KEY/LIVEKIT_API_SECRET/LIVEKIT_URL para prod).
+config :tora_dos_burro, ToraDosBurro.GoLive.LiveKitToken,
+  api_key: "devkey",
+  api_secret: "secret",
+  url: "ws://localhost:7880"
+
 # Do not include metadata nor timestamps in development logs
 config :logger, :default_formatter, format: "[$level] $message\n"
 

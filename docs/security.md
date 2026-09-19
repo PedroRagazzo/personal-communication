@@ -37,7 +37,7 @@ Regra que atravessa tudo: **nunca confiar no cliente.** Toda permissão é valid
 
 ## Segredos
 
-- Segredos (chave de assinatura do Guardian, segredo do TURN, credenciais de storage) via variáveis de ambiente/config em runtime, nunca commitados no repositório.
+- Segredos (chave de assinatura do Guardian, segredo do TURN, credenciais de storage, API key/secret do LiveKit) via variáveis de ambiente/config em runtime, nunca commitados no repositório. Em desenvolvimento, o LiveKit roda em modo `--dev` com credenciais fixas (`devkey`/`secret`) — nunca usar esse modo em produção (ver `docs/media.md`).
 - `docker-compose.yml` cobre só desenvolvimento local. Gestão de segredos em produção (vault ou secret manager da plataforma de deploy escolhida) é escopo formal da FASE 16, mesmo que ainda não implementada no MVP.
 
 ## Observabilidade como sinal de segurança

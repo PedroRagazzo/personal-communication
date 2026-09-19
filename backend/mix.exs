@@ -51,7 +51,8 @@ defmodule ToraDosBurro.MixProject do
       {:bandit, "~> 1.5"},
       {:argon2_elixir, "~> 4.1"},
       {:guardian, "~> 2.5"},
-      {:guardian_db, "~> 3.0"}
+      {:guardian_db, "~> 3.0"},
+      {:joken, "~> 2.7"}
     ]
   end
 

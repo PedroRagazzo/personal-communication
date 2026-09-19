@@ -46,6 +46,18 @@ services:
       - ./docker/coturn/turnserver.conf:/etc/coturn/turnserver.conf:ro
     command: ["-c", "/etc/coturn/turnserver.conf"]
 
+  # SFU para Go Live (FASE 9). Modo --dev usa credenciais fixas (devkey/secret
+  # — ver backend/config/dev.exs) e não persiste nada; nunca usar --dev em
+  # produção. network_mode: host pelo mesmo motivo do coturn acima: WebRTC
+  # precisa de uma faixa ampla de portas UDP, e host networking evita a
+  # complicação de mapear isso via NAT do Docker (documentado nos docs
+  # oficiais de self-hosting do LiveKit).
+  livekit:
+    image: livekit/livekit-server:latest
+    restart: unless-stopped
+    network_mode: host
+    command: ["--dev", "--bind", "0.0.0.0"]
+
   # Object storage compatível com S3 para anexos de mensagem (FASE 4/10).
   # Em produção, a mesma abstração ObjectStorage aponta para S3/R2 real.
   minio:

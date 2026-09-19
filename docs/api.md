@@ -127,12 +127,22 @@ Ver `realtime.md` e `media.md` para o detalhamento de cada tópico.
 |---|---|
 | `channel:{channel_id}` | Chat de texto em tempo real |
 | `voice:{channel_id}` | Sinalização de voz/vídeo/tela (SDP, ICE) |
+| `live:{channel_id}` | Go Live (FASE 9) — emite tokens do LiveKit, nunca SDP/ICE (mídia vai direto ao SFU) |
 | `server:{server_id}` | Presença agregada do servidor |
 | `user:{user_id}` | Eventos pessoais (pós-MVP: DM, notificações) |
+
+## FASE 9 — Go Live
+
+Sem endpoint REST — tudo via WebSocket, canal precisa ser `guild_voice`. Nova permissão `:stream` (padrão para membros comuns, ver `ToraDosBurro.Servers.Permissions`). Ver `docs/media.md` para o formato do token e a decisão de SFU (LiveKit).
+
+```
+join "live:{channel_id}"     → autoriza :connect, devolve {token, url} (subscriber-only)
+golive:start                 → autoriza :stream, devolve {token, url} (publisher)
+golive:stop                  → volta a subscriber; sem resposta de token
+```
 
 ## Fora do MVP (mencionado para não ser esquecido, não para implementar agora)
 
 ```
 Amigos / DM        → GET/POST /api/v1/friends, /api/v1/friends/requests, POST /api/v1/dms
-Go Live            → endpoints de FASE 9, dependem da escolha de SFU (ver media.md)
 ```
