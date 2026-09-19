@@ -4,9 +4,9 @@ Plataforma de comunicação em tempo real (estilo Discord): servidores/comunidad
 
 ## Status atual
 
-**FASE 0 — Arquitetura: concluída.** **FASE 1 — Backend básico: concluída.** **FASE 2 — Autenticação: concluída.** **FASE 3 — Usuários e servidores: concluída.** **FASE 4 — Chat em tempo real: núcleo concluído** — canais de texto, mensagens/edição/exclusão/reações/digitação via Phoenix Channels (WebSocket), histórico paginado via REST. 46 testes passando, verificado também com um cliente WebSocket real (não só os testes automatizados).
+**FASE 0 — Arquitetura: concluída.** **FASE 1 — Backend básico: concluída.** **FASE 2 — Autenticação: concluída.** **FASE 3 — Usuários e servidores: concluída.** **FASE 4 — Chat em tempo real: núcleo concluído.** **FASE 5 — Categorias e permissões por canal: concluída** — `permission_overwrites` com a mesma resolução de permissão do Discord (overwrite de `@everyone` → cargo → membro específico), canais podem ficar "privados" sem precisar de uma flag dedicada. 54 testes passando, verificado ao vivo (categoria, canal privado, membro comum bloqueado, dono sempre com acesso).
 
-Anexos leves (upload via MinIO) ficam para a próxima fatia da FASE 4 — dependem do Docker/MinIO estarem rodando (ver `docker-compose.yml`), o que este ambiente ainda não tem. Confirmação de email e recuperação de senha ficam para uma fatia futura da FASE 2 (dependem de escolher um mailer). `permission_overwrites` (exceção por canal) fica para a FASE 5.
+Anexos leves (upload via MinIO) ficam pendentes — dependem do Docker/MinIO estarem rodando (ver `docker-compose.yml`), o que este ambiente ainda não tem. Confirmação de email e recuperação de senha ficam para uma fatia futura da FASE 2 (dependem de escolher um mailer).
 
 Leia primeiro:
 
@@ -84,4 +84,4 @@ cmd /c '"C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Bu
 
 ## Próximos passos
 
-**FASE 4 (continuação) — Anexos leves** (upload de arquivo pequeno via URL pré-assinada do MinIO/S3) — precisa de `docker compose up -d` rodando para verificar de ponta a ponta. Depois, **FASE 5 — Canais** (categorias, canal de voz de verdade, reordenação, `permission_overwrites`).
+**FASE 6 — Voz** (mesh WebRTC, sinalização via Phoenix Channel, Presence). Anexos leves da FASE 4 continuam pendentes, precisando de `docker compose up -d` para verificar de ponta a ponta.
