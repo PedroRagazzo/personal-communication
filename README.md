@@ -4,9 +4,9 @@ Plataforma de comunicação em tempo real (estilo Discord): servidores/comunidad
 
 ## Status atual
 
-**FASE 0 — Arquitetura: concluída.** **FASE 1 — Backend básico: concluída.** **FASE 2 — Autenticação: concluída** — cadastro, login, JWT (Guardian + guardian_db, argon2id), rota protegida de exemplo. 14 testes passando, fluxo completo verificado contra o servidor rodando de verdade.
+**FASE 0 — Arquitetura: concluída.** **FASE 1 — Backend básico: concluída.** **FASE 2 — Autenticação: concluída.** **FASE 3 — Usuários e servidores: concluída** — servidores, membros, cargos com permissões (bitfield estilo Discord), convites, banimento. 31 testes passando, fluxo completo (criar servidor → convidar → entrar → checar permissão → expulsar → banir) verificado contra o servidor rodando de verdade.
 
-Confirmação de email e recuperação de senha ficam para uma fatia futura da FASE 2 (dependem de escolher um mailer).
+Confirmação de email e recuperação de senha ficam para uma fatia futura da FASE 2 (dependem de escolher um mailer). `permission_overwrites` (exceção por canal) fica para a FASE 5.
 
 Leia primeiro:
 
@@ -73,6 +73,15 @@ cd backend
 mix test
 ```
 
+**Windows:** o `argon2_elixir` compila uma extensão nativa e precisa do MSVC
+(Visual Studio Build Tools, workload "Desktop development with C++"). Se um
+terminal novo der erro `"nmake" not found`, carregue o ambiente do MSVC antes
+de rodar `mix`:
+
+```powershell
+cmd /c '"C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvarsall.bat" x64 && set' | ForEach-Object { if ($_ -match '^([^=]+)=(.*)$') { [Environment]::SetEnvironmentVariable($matches[1], $matches[2], 'Process') } }
+```
+
 ## Próximos passos
 
-**FASE 3 — Usuários e servidores** (servidores, membros, cargos/permissões, convites, banimento).
+**FASE 4 — Chat em tempo real** (Phoenix Channels: mensagens, edição, exclusão, respostas, reações, digitação, histórico paginado, anexos leves).
