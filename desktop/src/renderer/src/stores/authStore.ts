@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import * as api from '../services/api'
+import { useServersStore } from './serversStore'
 
 const ACCESS_TOKEN_KEY = 'access_token'
 const REFRESH_TOKEN_KEY = 'refresh_token'
@@ -88,6 +89,7 @@ export const useAuthStore = create<AuthState>((set) => ({
       await api.logout(refreshToken).catch(() => {})
     }
     await clearStoredTokens()
+    useServersStore.getState().reset()
     set({ status: 'unauthenticated', user: null, accessToken: null })
   }
 }))

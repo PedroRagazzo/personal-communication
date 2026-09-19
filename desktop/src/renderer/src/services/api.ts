@@ -99,3 +99,30 @@ export function me(accessToken: string): Promise<Me> {
     headers: { Authorization: `Bearer ${accessToken}` }
   })
 }
+
+export interface ServerSummary {
+  id: string
+  name: string
+  icon_url: string | null
+  owner_id: string
+}
+
+export function listServers(accessToken: string): Promise<ServerSummary[]> {
+  return request<{ servers: ServerSummary[] }>('/servers', {
+    headers: { Authorization: `Bearer ${accessToken}` }
+  }).then((res) => res.servers)
+}
+
+export interface ChannelSummary {
+  id: string
+  name: string
+  topic: string | null
+  type: string
+  position: number
+}
+
+export function listChannels(accessToken: string, serverId: string): Promise<ChannelSummary[]> {
+  return request<{ channels: ChannelSummary[] }>(`/servers/${serverId}/channels`, {
+    headers: { Authorization: `Bearer ${accessToken}` }
+  }).then((res) => res.channels)
+}

@@ -16,7 +16,7 @@ FASE 8  → Compartilhamento de tela (desktopCapturer, 1 por vez)        [CONCLU
         → Amigos / Mensagens Diretas (fast-follow — schema já pronto na FASE 3/4)
 FASE 9  → Go Live (SFU: LiveKit — ver media.md)                        [CONCLUÍDA (backend) — v0.9.0]
 FASE 10 → Arquivos — gestão avançada (redefinida, ver nota abaixo)
-FASE 11 → Cliente Electron (empacotamento, distribuição)          [EM ANDAMENTO — fatia 1: scaffold + auth, v0.10.0]
+FASE 11 → Cliente Electron (empacotamento, distribuição)          [EM ANDAMENTO — fatia 2: servidores/canais, v0.11.0]
 FASE 12 → Rust (media services — redirecionado pela adoção de SFU na FASE 9, ver media.md)
 FASE 13 → C++ (media engine nativo, chamado a partir do Rust)
 FASE 14 → Python / Machine Learning (analytics, moderação automática)
@@ -43,7 +43,7 @@ precisa de Docker/MinIO), Amigos/DM (fast-follow abaixo), e a FASE 11 em si.
 1. **Anexos de arquivo**: o documento original lista "Uploads" como FASE 10 (depois do Go Live). Anexos **leves** (imagem/arquivo pequeno, com validação) entram na **FASE 4** — chat sem nenhum anexo não é utilizável, e isso evita que a FASE 4 fique "funcional" apenas parcialmente. A FASE 10 passa a significar **gestão avançada de arquivos** (arquivos grandes, upload retomável, cotas, CDN) — um endurecimento pós-MVP, não a introdução do recurso básico.
 2. **Amigos/DM**: não aparecia como fase explícita no documento original (schema de `server`/`channel` sugeria isso implicitamente). Fica registrado aqui como **fast-follow logo após a FASE 8** (fora do MVP formal, mas antes da FASE 9), já que o schema (`friend_requests`, `channels.type = dm/group_dm`, `channel_recipients`) é desenhado desde a FASE 3/4 para suportar isso sem retrabalho.
 3. **FASE 9 (Go Live)**: decisão de SFU resolvida no kickoff da fase — **LiveKit**, não mediasoup (a recomendação preliminar original) — ver `media.md` para o raciocínio completo. Backend (autorização + emissão de token) implementado e verificado; o lado cliente/mídia real depende do LiveKit rodando (sem Docker neste ambiente) e do Electron (FASE 11).
-4. **FASE 11 (Electron)** é grande demais pra uma fatia só (Regra 1) — sendo dividida em fatias dentro da própria fase, cada uma com seu próprio ciclo explicar → implementar → testar: **fatia 1** (scaffold + autenticação, `v0.10.0`) concluída; lista de servidores, socket/presença, chat, voz/vídeo/tela e empacotamento/distribuição ficam para fatias seguintes, nessa ordem aproximada.
+4. **FASE 11 (Electron)** é grande demais pra uma fatia só (Regra 1) — sendo dividida em fatias dentro da própria fase, cada uma com seu próprio ciclo explicar → implementar → testar: **fatia 1** (scaffold + autenticação, `v0.10.0`) e **fatia 2** (lista de servidores/canais — navegação só leitura, `v0.11.0`, trouxe também o `GET /api/v1/servers` que faltava no backend) concluídas; socket/presença, chat em tempo real, criar servidor/canal, voz/vídeo/tela e empacotamento/distribuição ficam para fatias seguintes, nessa ordem aproximada.
 
 ## Processo de desenvolvimento (regras do projeto, mantidas)
 

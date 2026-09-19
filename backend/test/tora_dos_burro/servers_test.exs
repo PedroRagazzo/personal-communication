@@ -30,6 +30,27 @@ defmodule ToraDosBurro.ServersTest do
     end
   end
 
+  describe "list_servers_for_user/1" do
+    test "lista só os servidores em que o usuário é membro, dono incluso" do
+      owner = create_user(10)
+      other = create_user(11)
+      stranger = create_user(12)
+
+      {:ok, server_a} = Servers.create_server(owner, %{"name" => "Servidor A"})
+      {:ok, server_b} = Servers.create_server(owner, %{"name" => "Servidor B"})
+      {:ok, _} = Servers.join_server(server_b, other)
+
+      assert [a, b] = Servers.list_servers_for_user(owner)
+      assert a.id == server_a.id
+      assert b.id == server_b.id
+
+      assert [only_b] = Servers.list_servers_for_user(other)
+      assert only_b.id == server_b.id
+
+      assert Servers.list_servers_for_user(stranger) == []
+    end
+  end
+
   describe "join_server/2 e leave_server/2" do
     setup do
       owner = create_user(2)

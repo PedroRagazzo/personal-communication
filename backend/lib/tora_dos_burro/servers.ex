@@ -22,6 +22,14 @@ defmodule ToraDosBurro.Servers do
     end
   end
 
+  @doc "Servidores dos quais `user` é membro (inclui os que ele é dono, que também vira membro na criação)."
+  def list_servers_for_user(%User{} = user) do
+    Server
+    |> join(:inner, [s], m in ServerMember, on: m.server_id == s.id and m.user_id == ^user.id)
+    |> order_by([s], asc: s.inserted_at)
+    |> Repo.all()
+  end
+
   @doc """
   Cria o servidor, o cargo padrão `@everyone` e já entra o dono como membro
   — as três coisas numa transação só.

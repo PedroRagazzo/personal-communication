@@ -5,6 +5,11 @@ defmodule ToraDosBurroWeb.ServerController do
 
   action_fallback ToraDosBurroWeb.FallbackController
 
+  def index(conn, _params) do
+    servers = Servers.list_servers_for_user(current_user(conn))
+    render(conn, :index, servers: servers)
+  end
+
   def create(conn, %{"server" => server_params}) do
     with {:ok, server} <- Servers.create_server(current_user(conn), server_params) do
       conn

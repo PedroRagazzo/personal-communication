@@ -81,4 +81,20 @@ defmodule ToraDosBurroWeb.ServerFlowTest do
     rejoin_conn = auth_conn(troublemaker_token) |> post(~p"/api/v1/invites/#{code}/join")
     assert json_response(rejoin_conn, 422)
   end
+
+  test "GET /servers lista só os servidores do usuário autenticado" do
+    {_owner, owner_token} = register_and_login(4)
+    {_stranger, stranger_token} = register_and_login(5)
+
+    create_conn =
+      auth_conn(owner_token) |> post(~p"/api/v1/servers", server: %{"name" => "Meu Servidor"})
+
+    %{"server" => %{"id" => server_id}} = json_response(create_conn, 201)
+
+    owner_list_conn = auth_conn(owner_token) |> get(~p"/api/v1/servers")
+    assert %{"servers" => [%{"id" => ^server_id}]} = json_response(owner_list_conn, 200)
+
+    stranger_list_conn = auth_conn(stranger_token) |> get(~p"/api/v1/servers")
+    assert %{"servers" => []} = json_response(stranger_list_conn, 200)
+  end
 end

@@ -38,6 +38,7 @@ em vez de um único `PUT` substituindo a lista inteira; `POST .../bans` recebe
 `user_id` no corpo (não há sub-recurso de usuário alvo antes do ban existir).
 
 ```
+GET    /api/v1/servers                                                (só os que o usuário é membro — FASE 11)
 POST   /api/v1/servers
 GET    /api/v1/servers/:id
 PATCH  /api/v1/servers/:id

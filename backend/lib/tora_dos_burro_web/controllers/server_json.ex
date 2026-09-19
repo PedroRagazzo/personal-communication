@@ -1,6 +1,7 @@
 defmodule ToraDosBurroWeb.ServerJSON do
   alias ToraDosBurro.Servers.Server
 
+  def index(%{servers: servers}), do: %{servers: Enum.map(servers, &data/1)}
   def show(%{server: server}), do: %{server: data(server)}
 
   def data(%Server{} = server) do

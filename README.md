@@ -19,8 +19,9 @@ Plataforma de comunicação em tempo real (estilo Discord): servidores/comunidad
 | 8 | Compartilhamento de tela (1 por sala) | `v0.8.0` |
 | 9 | Go Live — sinalização (tokens LiveKit + Presence, SFU: LiveKit) | `v0.9.0` |
 | 11 | Cliente Electron — fatia 1: scaffold + autenticação | `v0.10.0` |
+| 11 | Cliente Electron — fatia 2: lista de servidores/canais | `v0.11.0` |
 
-**FASE 11 está em andamento, dividida em fatias** (é grande demais pra uma entrega só — ver `docs/roadmap.md`). Fatia 1 (concluída): app Electron real (main/preload/renderer isolados), cadastro/login contra o backend, tokens guardados via `safeStorage` (keychain do SO). Ainda faltam: lista de servidores, conexão com o socket/chat, voz/vídeo/tela/Go Live no cliente, empacotamento.
+**FASE 11 está em andamento, dividida em fatias** (é grande demais pra uma entrega só — ver `docs/roadmap.md`). Fatia 1: app Electron real (main/preload/renderer isolados), cadastro/login contra o backend, tokens guardados via `safeStorage` (keychain do SO). Fatia 2: navegação entre servidores e canais (só leitura — trouxe também o `GET /api/v1/servers` que faltava no backend). Ainda faltam: conexão com o socket/chat em tempo real, criar servidor/canal, voz/vídeo/tela/Go Live no cliente, empacotamento.
 
 **O qualificador "(backend)" nas FASES 6–9 ainda importa parcialmente.** Autenticação já liga cliente↔servidor de ponta a ponta — mas as peer connections WebRTC de verdade, perfect negotiation, STUN/coturn, `desktopCapturer` e a conexão real com o LiveKit ainda não foram implementadas no cliente (próximas fatias da FASE 11). Ninguém liga microfone/câmera/tela/transmissão ainda — só o "esqueleto" do lado servidor está pronto e testado (inclusive com cliente WebSocket real, não só a suíte automatizada).
 
@@ -114,7 +115,7 @@ Abre o app Electron de verdade (não só uma aba de navegador), com hot-reload. 
 
 ## Próximos passos
 
-FASE 11 (Electron) está em andamento — próxima fatia natural é ligar o cliente no socket (lista de servidores, canais, chat em tempo real), depois voz/vídeo/tela/Go Live. Outras direções em aberto, a decidir com quem está lendo isto:
+FASE 11 (Electron) está em andamento — próxima fatia natural é ligar o cliente no socket pra chat em tempo real (cliente `phoenix`, tópico `channel:{id}`), depois criar servidor/canal, depois voz/vídeo/tela/Go Live. Outras direções em aberto, a decidir com quem está lendo isto:
 
 - **Anexos leves** (fecha a FASE 4, precisa de `docker compose up -d`)
 - **Amigos/DM** (fast-follow, schema já pronto desde a FASE 3/4)

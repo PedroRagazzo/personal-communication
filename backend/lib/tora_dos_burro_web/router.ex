@@ -28,6 +28,7 @@ defmodule ToraDosBurroWeb.Router do
 
     get "/users/me", UserController, :me
 
+    get "/servers", ServerController, :index
     post "/servers", ServerController, :create
     get "/servers/:id", ServerController, :show
     patch "/servers/:id", ServerController, :update
