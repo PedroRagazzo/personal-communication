@@ -13,7 +13,7 @@ export class ApiError extends Error {
   }
 }
 
-function flattenErrors(errors: unknown): string {
+export function flattenErrors(errors: unknown): string {
   if (errors && typeof errors === 'object') {
     const obj = errors as Record<string, unknown>
     if (typeof obj.detail === 'string') return obj.detail
@@ -125,4 +125,34 @@ export function listChannels(accessToken: string, serverId: string): Promise<Cha
   return request<{ channels: ChannelSummary[] }>(`/servers/${serverId}/channels`, {
     headers: { Authorization: `Bearer ${accessToken}` }
   }).then((res) => res.channels)
+}
+
+export interface ServerMember {
+  id: string
+  nickname: string | null
+  joined_at: string
+  user: { id: string; username: string; discriminator: string }
+  roles: { id: string; name: string }[]
+}
+
+export function listMembers(accessToken: string, serverId: string): Promise<ServerMember[]> {
+  return request<{ members: ServerMember[] }>(`/servers/${serverId}/members`, {
+    headers: { Authorization: `Bearer ${accessToken}` }
+  }).then((res) => res.members)
+}
+
+export interface ChatMessage {
+  id: string
+  channel_id: string
+  author_id: string
+  content: string
+  reply_to_id: string | null
+  edited_at: string | null
+  inserted_at: string
+}
+
+export function listMessages(accessToken: string, channelId: string): Promise<ChatMessage[]> {
+  return request<{ messages: ChatMessage[] }>(`/channels/${channelId}/messages`, {
+    headers: { Authorization: `Bearer ${accessToken}` }
+  }).then((res) => res.messages)
 }

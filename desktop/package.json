@@ -14,6 +14,7 @@
     "preview": "electron-vite preview"
   },
   "dependencies": {
+    "phoenix": "^1.8.14",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
     "zustand": "^5.0.15"
@@ -21,6 +22,7 @@
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.3",
     "@types/node": "^24.9.0",
+    "@types/phoenix": "^1.6.7",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^5.2.0",

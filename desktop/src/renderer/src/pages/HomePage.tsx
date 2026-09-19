@@ -3,10 +3,10 @@ import { useAuthStore } from '../stores/authStore'
 import { useServersStore } from '../stores/serversStore'
 import { ServerSidebar } from '../components/ServerSidebar'
 import { ChannelList } from '../components/ChannelList'
+import { ChatView } from '../components/ChatView'
 
-// Shell autenticado (FASE 11, fatia 2): navegação entre servidores e
-// canais. Chat/voz/vídeo/tela/Go Live no cliente chegam nas próximas
-// fatias — a área principal é só um placeholder por enquanto.
+// Shell autenticado: navegação entre servidores/canais (fatia 2) + chat em
+// tempo real (fatia 3). Voz/vídeo/tela/Go Live no cliente ainda faltam.
 export function HomePage() {
   const user = useAuthStore((s) => s.user)
   const accessToken = useAuthStore((s) => s.accessToken)
@@ -15,6 +15,7 @@ export function HomePage() {
   const servers = useServersStore((s) => s.servers)
   const selectedServerId = useServersStore((s) => s.selectedServerId)
   const channels = useServersStore((s) => s.channels)
+  const members = useServersStore((s) => s.members)
   const selectedChannelId = useServersStore((s) => s.selectedChannelId)
   const loadServers = useServersStore((s) => s.loadServers)
   const selectServer = useServersStore((s) => s.selectServer)
@@ -67,9 +68,19 @@ export function HomePage() {
             </button>
           </div>
         </header>
-        <div className="flex flex-1 items-center justify-center text-neutral-600">
-          {selectedChannel ? 'Chat chega na próxima fatia da FASE 11' : 'Nenhum canal selecionado'}
-        </div>
+        {selectedChannel && selectedChannel.type === 'guild_text' && (
+          <ChatView channel={selectedChannel} accessToken={accessToken} members={members} />
+        )}
+        {selectedChannel && selectedChannel.type === 'guild_voice' && (
+          <div className="flex flex-1 items-center justify-center text-neutral-600">
+            Canais de voz ainda não funcionam no cliente
+          </div>
+        )}
+        {!selectedChannel && (
+          <div className="flex flex-1 items-center justify-center text-neutral-600">
+            Nenhum canal selecionado
+          </div>
+        )}
       </div>
     </div>
   )

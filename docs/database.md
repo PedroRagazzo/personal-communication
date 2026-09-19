@@ -27,7 +27,7 @@ Banco: PostgreSQL via Ecto. Este é o modelo inicial (FASE 0); migrations reais 
 | `categories` | id, server_id, name, position | |
 | `channels` | id, server_id?, category_id?, type, name, topic, position | unifica canais de servidor e DM |
 | `channel_recipients` | channel_id, user_id | participantes de DM/group DM |
-| `messages` | id, channel_id, author_id, content, reply_to_id?, edited_at? | |
+| `messages` | id, channel_id, author_id, content, reply_to_id?, edited_at?, **seq** | `seq` (bigserial) é a chave de ordenação/paginação real, não `inserted_at`/`id` — UUID não ordena e a resolução de clock do SO não desempata mesma-milissegundo (achado na FASE 4) |
 | `message_attachments` | id, message_id, object_key, filename, content_type, size_bytes | via abstração `ObjectStorage` (MinIO local / S3-R2 produção) |
 | `message_reactions` | id, message_id, user_id, emoji | |
 | `read_states` | user_id, channel_id, last_read_message_id, updated_at | badges de "não lido" |

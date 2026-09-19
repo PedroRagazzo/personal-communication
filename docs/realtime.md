@@ -6,7 +6,7 @@ Este documento cobre o transporte de **controle e sinalização em tempo real** 
 
 | Tópico | Uso | Fase |
 |---|---|---|
-| `channel:{channel_id}` | Chat de texto: mensagens, edição, exclusão, reações, digitação | FASE 4 |
+| `channel:{channel_id}` | Chat de texto: mensagens, edição, exclusão, reações, digitação | FASE 4 — `message:create`/histórico **implementados no cliente** (FASE 11 fatia 3); edição/exclusão/reação/digitação ainda só no backend |
 | `voice:{channel_id}` | Sinalização de voz/vídeo/tela (SDP, ICE) — nunca mídia em si | FASE 6 |
 | `server:{server_id}` | Presença agregada do servidor (quem está online) | FASE 4/6 |
 | `user:{user_id}` | Eventos pessoais (notificações; DM quando essa feature entrar pós-MVP) | pós-MVP |
@@ -29,7 +29,7 @@ join → autentica (token) + autoriza (roles/permission_overwrites)
    └── presence:update  → via Phoenix.Presence
 ```
 
-Histórico é paginado por cursor (`inserted_at`/`id`), carregado sob demanda (REST — ver `api.md` — não via Channel).
+Histórico é paginado por cursor (`seq` — bigserial monotônico, não `inserted_at`/`id`: UUID não é ordenável e a resolução de clock do SO não é fina o bastante pra desempatar mensagens no mesmo milissegundo, ver `database.md`), carregado sob demanda (REST — ver `api.md` — não via Channel).
 
 ## Eventos (nomenclatura)
 

@@ -5,6 +5,7 @@ interface ServersState {
   servers: api.ServerSummary[]
   selectedServerId: string | null
   channels: api.ChannelSummary[]
+  members: api.ServerMember[]
   selectedChannelId: string | null
   loadingServers: boolean
   loadingChannels: boolean
@@ -19,6 +20,7 @@ const initialState = {
   servers: [] as api.ServerSummary[],
   selectedServerId: null as string | null,
   channels: [] as api.ChannelSummary[],
+  members: [] as api.ServerMember[],
   selectedChannelId: null as string | null,
   loadingServers: false,
   loadingChannels: false,
@@ -43,14 +45,22 @@ export const useServersStore = create<ServersState>((set, get) => ({
     set({
       selectedServerId: serverId,
       channels: [],
+      members: [],
       selectedChannelId: null,
       loadingChannels: true,
       error: null
     })
     try {
-      const channels = await api.listChannels(accessToken, serverId)
-      set({ channels, loadingChannels: false })
+      // Precisa dos membros pra resolver author_id -> username#discriminator
+      // no chat (a mensagem em si só traz o id, ver docs/api.md).
+      const [channels, members] = await Promise.all([
+        api.listChannels(accessToken, serverId),
+        api.listMembers(accessToken, serverId)
+      ])
+      if (get().selectedServerId !== serverId) return
+      set({ channels, members, loadingChannels: false })
     } catch (err) {
+      if (get().selectedServerId !== serverId) return
       set({ error: err instanceof Error ? err.message : 'erro desconhecido', loadingChannels: false })
     }
   },

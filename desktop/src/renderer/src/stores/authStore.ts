@@ -1,6 +1,8 @@
 import { create } from 'zustand'
 import * as api from '../services/api'
+import { connectSocket, disconnectSocket } from '../services/socket'
 import { useServersStore } from './serversStore'
+import { useChatStore } from './chatStore'
 
 const ACCESS_TOKEN_KEY = 'access_token'
 const REFRESH_TOKEN_KEY = 'refresh_token'
@@ -42,6 +44,7 @@ export const useAuthStore = create<AuthState>((set) => ({
 
       try {
         const user = await api.me(accessToken)
+        connectSocket(accessToken)
         set({ status: 'authenticated', user, accessToken })
         return
       } catch (err) {
@@ -49,6 +52,7 @@ export const useAuthStore = create<AuthState>((set) => ({
           const { access_token } = await api.refresh(refreshToken)
           const user = await api.me(access_token)
           await window.api.secureStorage.set(ACCESS_TOKEN_KEY, access_token)
+          connectSocket(access_token)
           set({ status: 'authenticated', user, accessToken: access_token })
           return
         }
@@ -89,7 +93,9 @@ export const useAuthStore = create<AuthState>((set) => ({
       await api.logout(refreshToken).catch(() => {})
     }
     await clearStoredTokens()
+    useChatStore.getState().reset()
     useServersStore.getState().reset()
+    disconnectSocket()
     set({ status: 'unauthenticated', user: null, accessToken: null })
   }
 }))
@@ -109,5 +115,6 @@ async function persistAndSetAuthenticated(tokens: api.AuthTokens): Promise<void>
   // Busca o perfil completo via /users/me (inclui `status`, que o payload de
   // tokens não traz) em vez de confiar no `user` parcial do register/login.
   const user = await api.me(tokens.access_token)
+  connectSocket(tokens.access_token)
   useAuthStore.setState({ status: 'authenticated', accessToken: tokens.access_token, user })
 }
