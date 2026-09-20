@@ -2,6 +2,10 @@
 
 Plataforma de comunicação em tempo real (estilo Discord): servidores/comunidades, canais de texto e voz, chat em tempo real, mensagens diretas, voz e vídeo via WebRTC, **compartilhamento de tela**, Go Live e upload de arquivos — com backend em Elixir/Phoenix, cliente desktop em React + Electron, e Rust/C++/Python entrando depois do MVP conforme necessidade real de performance.
 
+## Download
+
+**[TORA DOS BURRO v1.0.0 (Windows)](https://github.com/PedroRagazzo/tora-dos-burro/releases/tag/v1.0.0)** — instalador `.exe`, não precisa de admin. O Windows vai avisar "editor desconhecido" (SmartScreen) na primeira execução — esperado, o instalador não é assinado; "Mais informações" → "Executar assim mesmo". Depois de instalar, crie sua conta e peça um convite pro dono do servidor pra entrar.
+
 ## Status atual
 
 **MVP (backend) concluído — FASES 0 a 8 — mais a FASE 9 (Go Live) como fast-follow, todas verificadas de ponta a ponta.** 86 testes passando (`cd backend && mix test`). **FASE 11 (cliente Electron) também concluída** (`v0.17.0`) — chat, voz, vídeo, compartilhamento de tela, Go Live, entrar em servidor via convite e empacotamento/instalador, todos com o lado do cliente implementado e testado ao vivo.
