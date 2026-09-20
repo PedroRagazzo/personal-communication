@@ -57,6 +57,28 @@ defmodule ToraDosBurroWeb.VoiceChannelTest do
     assert_push "presence_state", %{^owner_id => _, ^other_id => _}
   end
 
+  test "join devolve credenciais TURN efêmeras válidas pro user_id de quem entrou", %{
+    owner: owner,
+    voice_channel: channel
+  } do
+    owner_socket = connect_as(owner)
+
+    assert {:ok, %{turn: %{urls: url, username: username, credential: credential}}, _voice} =
+             subscribe_and_join(owner_socket, "voice:#{channel.id}", %{})
+
+    assert url ==
+             Application.fetch_env!(:tora_dos_burro, ToraDosBurro.Turn) |> Keyword.fetch!(:url)
+
+    assert [expiry_str, user_id] = String.split(username, ":", parts: 2)
+    assert user_id == owner.id
+    {expiry, ""} = Integer.parse(expiry_str)
+    assert expiry > System.system_time(:second)
+
+    secret = Application.fetch_env!(:tora_dos_burro, ToraDosBurro.Turn) |> Keyword.fetch!(:secret)
+    expected_credential = :crypto.mac(:hmac, :sha, secret, username) |> Base.encode64()
+    assert credential == expected_credential
+  end
+
   test "canal de texto não aceita join em voice:", %{owner: owner, text_channel: channel} do
     owner_socket = connect_as(owner)
 

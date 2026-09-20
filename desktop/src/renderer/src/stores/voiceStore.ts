@@ -203,7 +203,13 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
       await new Promise<void>((resolve, reject) => {
         channel
           .join()
-          .receive('ok', () => resolve())
+          // TURN entra como fallback do STUN público já embutido no
+          // MeshManager — credenciais efêmeras (ver backend/Turn),
+          // válidas só pra essa sessão de voz.
+          .receive('ok', (resp: { turn?: RTCIceServer }) => {
+            if (resp?.turn) meshManager.addIceServer(resp.turn)
+            resolve()
+          })
           .receive('error', (resp) => reject(resp))
       })
     } catch {

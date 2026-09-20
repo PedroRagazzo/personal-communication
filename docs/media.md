@@ -67,10 +67,36 @@ saber quem entra/sai e criar/destruir peer connections. Verificado com
 dois clientes reais (duas abas independentes, cada uma com seu próprio
 usuário e stream de áudio sintético via Web Audio API — não precisa de
 microfone físico pra validar a malha) trocando tracks de áudio de
-verdade nos dois sentidos. **Só STUN público** (`stun:stun.l.google.com`)
-por enquanto — coturn (TURN) já está no `docker-compose.yml` mas não dá
-pra testar aqui (sem Docker, mesma limitação de sempre); falta ligar o
-cliente nele quando o ambiente permitir.
+verdade nos dois sentidos.
+
+**TURN implementado** (preparação pro deploy numa VPS): STUN público
+sozinho falha quando alguém está atrás de NAT simétrico/restritivo (redes
+corporativas, alguns 4G/5G) — coturn já estava no `docker-compose.yml`
+desde a FASE 6, mas nenhum código usava ele de fato. `ToraDosBurro.Turn`
+(novo) implementa o mecanismo padrão do coturn (`use-auth-secret`,
+confirmado na [wiki oficial](https://github.com/coturn/coturn/wiki/turnserver/28dc2d9e2b313b8923b6fd50f2a84e03933ea9d9),
+não inventado): `username = "<expiração_unix>:<user_id>"`, `credential =
+base64(HMAC-SHA1(segredo, username))`, credenciais válidas por 24h (uma
+chamada de voz pode durar a sessão inteira). `VoiceChannel.join` devolve
+isso na própria resposta do join (`{turn: %{urls, username, credential}}`,
+mesmo padrão 3-tuple que o `GoLiveChannel` já usa) — nunca um segredo
+estático exposto ao cliente. `MeshManager.ts` ganhou `addIceServer()`
+(mantém o STUN público como base, TURN entra como fallback);
+`voiceStore.ts` chama isso assim que o join responde, antes de qualquer
+`RTCPeerConnection` ser criada (a ordem natural do fluxo já garante isso —
+`presence.onSync`, que dispara `addPeer()`, só começa a chegar depois do
+join responder).
+
+Verificado ao vivo (Electron real + peer independente, áudio sintético):
+interceptando o construtor de `RTCPeerConnection` no meio do teste,
+confirmado que a config `iceServers` recebida de verdade continha os dois
+— STUN público e o TURN com usuário/credencial corretos (usuário batendo
+com o `user_id` de quem entrou, expiração ~24h à frente) — e a chamada de
+voz seguiu funcionando normalmente (áudio real fluindo nos dois sentidos)
+com a nova config. **Não verificável neste ambiente** (sem Docker): a
+credencial sendo de fato aceita por um coturn rodando e o relay
+efetivamente sendo usado sob NAT restritivo — só a geração/entrega
+correta da credencial foi confirmada.
 
 **Deafen implementado** (logo após a revisão do cap de tela, `v0.15.2`):
 backend não mudou — `state:update` já aceitava `deafened` desde a FASE 6,

@@ -40,7 +40,7 @@ export interface MeshCallbacks {
   onPeerRemoved: (peerId: string) => void
 }
 
-const ICE_SERVERS: RTCIceServer[] = [{ urls: 'stun:stun.l.google.com:19302' }]
+const DEFAULT_ICE_SERVERS: RTCIceServer[] = [{ urls: 'stun:stun.l.google.com:19302' }]
 
 interface PeerEntry {
   connection: RTCPeerConnection
@@ -57,12 +57,22 @@ export class MeshManager {
   private localStream: MediaStream | null = null
   private cameraStream: MediaStream | null = null
   private screenStream: MediaStream | null = null
+  // STUN público sozinho falha atrás de NAT simétrico/restritivo — TURN
+  // (docker/coturn) entra como fallback assim que o backend devolve
+  // credenciais efêmeras no join de voice:{id} (ver voiceStore.ts). Peers
+  // adicionados antes disso (não deveria acontecer, mas por segurança)
+  // ainda usam só STUN.
+  private iceServers: RTCIceServer[] = DEFAULT_ICE_SERVERS
 
   constructor(
     private readonly localUserId: string,
     private readonly send: SignalSender,
     private readonly callbacks: MeshCallbacks
   ) {}
+
+  addIceServer(server: RTCIceServer): void {
+    this.iceServers = [...this.iceServers, server]
+  }
 
   setLocalStream(stream: MediaStream): void {
     this.localStream = stream
@@ -107,7 +117,7 @@ export class MeshManager {
   addPeer(peerId: string): void {
     if (this.peers.has(peerId) || peerId === this.localUserId) return
 
-    const connection = new RTCPeerConnection({ iceServers: ICE_SERVERS })
+    const connection = new RTCPeerConnection({ iceServers: this.iceServers })
     // Papel determinístico: os dois lados calculam a mesma coisa (com os
     // operandos trocados), então sempre concordam sobre quem é polite.
     const polite = this.localUserId < peerId

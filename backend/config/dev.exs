@@ -69,6 +69,13 @@ config :tora_dos_burro, ToraDosBurro.GoLive.LiveKitToken,
   api_secret: "secret",
   url: "ws://localhost:7880"
 
+# TURN (FASE 6+, credenciais efêmeras via TURN REST API) — mesmo segredo
+# "dev-only-change-me-before-any-shared-use" do docker/coturn/turnserver.conf,
+# nunca usado em produção (runtime.exs lê de TURN_SECRET/TURN_URL).
+config :tora_dos_burro, ToraDosBurro.Turn,
+  secret: "dev-only-change-me-before-any-shared-use",
+  url: "turn:localhost:3478"
+
 # CORS (FASE 11) — origem do cliente Electron em dev: o dev server do Vite
 # (electron-vite), porta padrão do Vite.
 config :cors_plug, origin: ["http://localhost:5173"]

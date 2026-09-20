@@ -33,6 +33,11 @@ config :tora_dos_burro, ToraDosBurro.GoLive.LiveKitToken,
   api_secret: "test-api-secret-value",
   url: "ws://localhost:7880"
 
+# TURN — segredo só de teste, nenhum coturn real envolvido.
+config :tora_dos_burro, ToraDosBurro.Turn,
+  secret: "test-turn-secret",
+  url: "turn:localhost:3478"
+
 # argon2 mais rápido em teste (não precisa do custo total de produção)
 config :argon2_elixir, t_cost: 1, m_cost: 8
 

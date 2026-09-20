@@ -83,6 +83,16 @@ if config_env() == :prod do
     api_secret: livekit_api_secret,
     url: livekit_url
 
+  turn_secret =
+    System.get_env("TURN_SECRET") ||
+      raise "environment variable TURN_SECRET is missing"
+
+  turn_url =
+    System.get_env("TURN_URL") ||
+      raise "environment variable TURN_URL is missing (ex.: turn:1.2.3.4:3478)"
+
+  config :tora_dos_burro, ToraDosBurro.Turn, secret: turn_secret, url: turn_url
+
   config :cors_plug,
     origin: System.get_env("CORS_ORIGIN", "") |> String.split(",", trim: true)
 

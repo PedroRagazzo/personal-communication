@@ -12,6 +12,11 @@ defmodule ToraDosBurroWeb.VoiceChannel do
   esse fan-out é aceitável; um SFU (fora do escopo desta fase) resolveria
   isso de outro jeito.
 
+  `join` devolve credenciais TURN efêmeras (`ToraDosBurro.Turn`) na própria
+  resposta, junto do `:ok` — STUN público sozinho falha quando alguém está
+  atrás de NAT simétrico/restritivo (comum em redes corporativas e alguns
+  4G/5G), então o cliente usa isso como fallback no `RTCPeerConnection`.
+
   Vídeo (FASE 7) reaproveita esse mesmo canal — ligar câmera é só mais uma
   track na mesma peer connection. `video:enable` é limitado a um número
   máximo de participantes com vídeo por sala (`@max_video_participants`),
@@ -33,6 +38,7 @@ defmodule ToraDosBurroWeb.VoiceChannel do
   use ToraDosBurroWeb, :channel
 
   alias ToraDosBurro.Channels
+  alias ToraDosBurro.Turn
   alias ToraDosBurroWeb.Presence
 
   @max_video_participants 4
@@ -45,7 +51,7 @@ defmodule ToraDosBurroWeb.VoiceChannel do
          :ok <- ensure_voice_channel(channel),
          :ok <- Channels.authorize(channel, user, :connect) do
       send(self(), :after_join)
-      {:ok, assign(socket, channel: channel)}
+      {:ok, %{turn: Turn.credentials(user.id)}, assign(socket, channel: channel)}
     else
       _ -> {:error, %{reason: "forbidden"}}
     end

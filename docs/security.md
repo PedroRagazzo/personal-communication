@@ -25,7 +25,7 @@ Regra que atravessa tudo: **nunca confiar no cliente.** Toda permissão é valid
 
 ## Rede / WebRTC
 
-- **coturn** com credenciais **temporárias via TURN REST API** (`use-auth-secret` + segredo compartilhado) — nunca usuário/senha estático, que transforma o TURN num relay aberto explorável por terceiros. Ver `docker/coturn/turnserver.conf`.
+- **coturn** com credenciais **temporárias via TURN REST API** (`use-auth-secret` + segredo compartilhado) — nunca usuário/senha estático, que transforma o TURN num relay aberto explorável por terceiros. Implementado em `ToraDosBurro.Turn` (username `"<expiração_unix>:<user_id>"`, credential HMAC-SHA1, válido 24h), devolvido no join de `voice:{id}`. Ver `docker/coturn/turnserver.conf` e `docs/media.md`.
 
 ## Validação de entrada
 
