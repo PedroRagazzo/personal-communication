@@ -180,3 +180,10 @@ export function listMessages(accessToken: string, channelId: string): Promise<Ch
     headers: { Authorization: `Bearer ${accessToken}` }
   }).then((res) => res.messages)
 }
+
+export function joinInvite(accessToken: string, code: string): Promise<ServerSummary> {
+  return request<{ server: ServerSummary }>(`/invites/${code}/join`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${accessToken}` }
+  }).then((res) => res.server)
+}

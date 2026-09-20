@@ -18,6 +18,7 @@ interface ServersState {
     name: string,
     type: 'guild_text' | 'guild_voice'
   ) => Promise<boolean>
+  joinServer: (accessToken: string, code: string) => Promise<boolean>
   reset: () => void
 }
 
@@ -91,6 +92,39 @@ export const useServersStore = create<ServersState>((set, get) => ({
             : err instanceof Error
               ? err.message
               : 'erro desconhecido'
+      })
+      return false
+    }
+  },
+
+  joinServer: async (accessToken, code) => {
+    try {
+      const server = await api.joinInvite(accessToken, code)
+      // Servidor pode já estar na lista se o convite for pra um servidor do
+      // qual a pessoa saiu e voltou a entrar — evita duplicar o ícone.
+      set((state) => ({
+        servers: state.servers.some((s) => s.id === server.id) ? state.servers : [...state.servers, server],
+        error: null
+      }))
+      await get().selectServer(accessToken, server.id)
+      return true
+    } catch (err) {
+      const reason = err instanceof api.ApiError ? err.message : null
+      set({
+        error:
+          reason === 'not found'
+            ? 'convite inválido ou não encontrado'
+            : reason === 'expired'
+              ? 'esse convite expirou'
+              : reason === 'max_uses_reached'
+                ? 'esse convite já atingiu o limite de usos'
+                : reason === 'banned'
+                  ? 'você foi banido desse servidor'
+                  : reason === 'already_member'
+                    ? 'você já é membro desse servidor'
+                    : err instanceof Error
+                      ? err.message
+                      : 'erro desconhecido'
       })
       return false
     }

@@ -24,6 +24,7 @@ export function HomePage() {
   const selectServer = useServersStore((s) => s.selectServer)
   const selectChannel = useServersStore((s) => s.selectChannel)
   const createChannel = useServersStore((s) => s.createChannel)
+  const joinServer = useServersStore((s) => s.joinServer)
 
   useEffect(() => {
     if (accessToken) loadServers(accessToken)
@@ -39,7 +40,9 @@ export function HomePage() {
       <ServerSidebar
         servers={servers}
         selectedServerId={selectedServerId}
+        error={serversError}
         onSelect={(id) => selectServer(accessToken, id)}
+        onJoin={(code) => joinServer(accessToken, code)}
       />
       <ChannelList
         server={selectedServer}
