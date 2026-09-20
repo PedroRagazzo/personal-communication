@@ -1,0 +1,25 @@
+appId: com.toradosburro.desktop
+productName: TORA DOS BURRO
+directories:
+  buildResources: build
+files:
+  - '!src/**'
+  - '!tests/**'
+  - '!electron.vite.config.{js,ts,mjs,cjs}'
+  - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
+  - '!{.env,.env.*}'
+# Nenhuma dependência nativa no desktop/package.json (livekit-client, phoenix,
+# react, zustand são todos JS puro) — não há nada pra recompilar pro ABI do
+# Electron, então pular esse passo só economiza tempo de build.
+npmRebuild: false
+win:
+  executableName: tora-dos-burro
+  target:
+    - target: nsis
+      arch:
+        - x64
+nsis:
+  artifactName: ${name}-${version}-setup.${ext}
+  shortcutName: ${productName}
+  uninstallDisplayName: ${productName}
+  createDesktopShortcut: always
