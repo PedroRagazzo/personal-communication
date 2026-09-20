@@ -2,9 +2,17 @@
 <html lang="pt-BR">
   <head>
     <meta charset="UTF-8" />
+    <!-- :7880 + wss:/https: (Go Live): a URL do LiveKit é dinâmica, devolvida
+         pelo backend em tempo de execução (join/golive:start), não dá pra
+         fixar um host só — dev usa a porta 7880 padrão do --dev do LiveKit,
+         prod usa host arbitrário (LIVEKIT_URL). O client oficial
+         (livekit-client) abre tanto um WebSocket quanto um preflight HTTP
+         "validate" pro mesmo host, por isso os dois esquemas precisam de
+         liberação (confirmado ao vivo: o preflight http:// ainda era
+         bloqueado mesmo com só ws:// liberado). -->
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' http://localhost:4000 ws://localhost:4000 ws://localhost:5173;"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' http://localhost:4000 ws://localhost:4000 ws://localhost:5173 ws://localhost:7880 http://localhost:7880 wss: https:;"
     />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>TORA DOS BURRO</title>

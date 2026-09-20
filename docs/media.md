@@ -277,7 +277,66 @@ Streamer → Capture → Encoder → SFU (LiveKit) → Viewers (N)
 - **Sem chamadas à Room Service API** (`CreateRoom` etc.): uma sala do LiveKit é criada automaticamente no primeiro join autenticado com token válido (`roomJoin: true`), o que é suficiente para este escopo.
 - `docker-compose.yml` ganhou um serviço `livekit` (`livekit-server --dev`, credenciais fixas `devkey`/`secret` — nunca usar `--dev` em produção).
 
-**Verificado**: `mix test` (contexto + Channel, incluindo forma exata do JWT decodificado) e um cliente WebSocket real (Node + `phoenix`) contra `mix phx.server` rodando de verdade — join, `golive:start`/`golive:stop`, `presence_diff`, e dois streamers simultâneos na mesma sala. **Não verificável neste ambiente** (sem Docker, mesma limitação do MinIO/FASE 4): a transmissão de mídia de verdade contra um LiveKit rodando, e o lado cliente (conectar ao LiveKit, publicar/assistir tracks) — chega só com o Electron (FASE 11).
+**Verificado (lado servidor)**: `mix test` (contexto + Channel, incluindo forma exata do JWT decodificado) e um cliente WebSocket real (Node + `phoenix`) contra `mix phx.server` rodando de verdade — join, `golive:start`/`golive:stop`, `presence_diff`, e dois streamers simultâneos na mesma sala.
+
+**Lado do cliente implementado (FASE 11, fatia 10)**: `stores/goLiveStore.ts`,
+novo, sem reaproveitar nada do `MeshManager` — Go Live não é mesh, é
+cliente↔LiveKit direto via `livekit-client` (`^2.22.3`, SDK oficial
+`livekit/client-sdk-js`; API conferida direto nos `.d.ts` instalados, não de
+memória). Entrar no canal de voz (`VoicePanel.tsx`, `handleConnect`) dispara
+duas conexões independentes ao mesmo tempo — `voiceStore.join` (mesh, mic
+real) e `goLiveStore.join` (LiveKit, token *subscriber-only*, ligado desde
+já para qualquer transmissão que já esteja rolando aparecer na hora) — que
+só compartilham o botão Conectar/Sair por conveniência de UX, não a conexão
+em si. "Ir ao vivo" (`startGoLive`) troca para um token *publisher*: como a
+API do LiveKit não tem upgrade de permissão numa conexão já aberta, isso é
+`room.disconnect()` + `room.connect()` de novo com o token novo, no mesmo
+objeto `Room` (não recria). Sem cap de participantes com vídeo no cliente
+(diferente da câmera do mesh) — o SFU não tem o custo de decode-por-peer que
+justifica aquele limite.
+
+**Bug real encontrado e corrigido nesta fatia — CSP bloqueava o Go Live por
+completo, em qualquer ambiente, não só aqui**: a
+`Content-Security-Policy` do `index.html` (`connect-src`) nunca incluía a
+URL do LiveKit — nem a porta 7880 fixa do dev, nem (mais importante) um
+esquema genérico para a URL arbitrária que `LIVEKIT_URL` assume em produção.
+`room.connect()` falhava sempre, mas com uma mensagem genérica ("Failed to
+fetch") indistinguível de "servidor fora do ar" a olho nu — só apareceu como
+CSP ao checar o console do DevTools (`securitypolicyviolation` /
+`Refused to connect ... violates ... Content-Security-Policy`), não dava pra
+ver isso só por `npm run typecheck` ou lendo o código, exatamente o tipo de
+bug que a exigência de testar ao vivo do projeto existe para pegar. Duas
+liberações eram necessárias, não uma: o `livekit-client` abre tanto um
+WebSocket (`ws://`/`wss://`) quanto um preflight HTTP `.../validate`
+(`http://`/`https://`) para o mesmo host — descoberto só depois de corrigir
+a primeira e ver o preflight ainda bloqueado. Como a URL do LiveKit é
+sempre dinâmica (entregue pelo backend em tempo de execução via
+`join`/`golive:start`, nunca fixa no build do cliente — ver `GoLive` em
+`architecture.md`), fixar um host só no CSP não é estruturalmente possível;
+corrigido liberando os quatro esquemas por padrão (`ws://localhost:7880` +
+`http://localhost:7880` explícitos para o `--dev` local, `wss:`/`https:`
+genéricos para produção). Ver comentário no próprio `index.html`.
+
+Verificado ao vivo (Electron real via CDP para o dono, com microfone de
+verdade, + um segundo peer independente pela aba comum do navegador): o
+join do `live:{channel_id}` chega certo dos dois lados (token/URL recebidos,
+claims do JWT decodificadas batendo com o contrato do backend — `sub`,
+`canPublish: false`, `room: "golive-<channel_id>"`); com o CSP corrigido, a
+tentativa de conexão ao LiveKit já não é mais bloqueada e chega a um erro de
+rede real (`ERR_CONNECTION_REFUSED`, confirmado no console — não mais CSP),
+exatamente o esperado sem um LiveKit de verdade rodando; o `try/catch` em
+`goLiveStore.join` captura essa falha, volta pro estado `idle` com uma
+mensagem clara, e **não** derruba nem afeta a chamada de voz (mesh) que
+segue conectada e funcional ao lado — confirmado com o dono com mic real
+conectado simultaneamente nos dois. **Não verificável neste ambiente** (sem
+Docker, mesma limitação do MinIO/coturn): a transmissão de mídia de verdade
+(publish/subscribe de tracks reais contra um LiveKit rodando) e, por
+depender de uma conexão LiveKit bem-sucedida pra sequer habilitar o botão
+"Ir ao vivo" na UI, todo o fluxo de elevação a publisher
+(`startGoLive`/`golive:start`/token publisher) e o indicador 🔴 via
+Presence — esse caminho só passou por `npm run typecheck` (uso de API
+correto, conferido contra os `.d.ts` reais) e revisão de código, não
+execução ao vivo.
 
 ## Comunicação Elixir ↔ Rust ↔ C++ ↔ Python (contrato para quando essas fases chegarem)
 

@@ -1,17 +1,23 @@
 import { useEffect, useRef, useState } from 'react'
 import type { ChannelSummary, ServerMember } from '../services/api'
 import { useVoiceStore } from '../stores/voiceStore'
+import { useGoLiveStore } from '../stores/goLiveStore'
 import { ScreenSharePicker } from './ScreenSharePicker'
 
 // Voz (FASE 11, fatia 4) + compartilhamento de tela (fatia 5) + câmera
-// (fatia 6): conectar entra no mesh WebRTC de verdade (mic real); tela e
-// câmera adicionam tracks de vídeo às mesmas peer connections (não são
-// meshes separados, e podem estar ativas ao mesmo tempo). A conexão vive
-// em `voiceStore`, não neste componente — trocar de canal só esconde os
-// controles, não desconecta (mesmo comportamento do Discord: sair da
-// visão do canal de voz não te tira da chamada). Falta pra uma próxima
-// fatia: uma barra persistente mostrando "conectado em #x" visível de
-// qualquer lugar do app.
+// (fatia 6) + Go Live (fatia 10): conectar entra no mesh WebRTC de
+// verdade (mic real) E no Go Live (LiveKit, subscriber-only até alguém
+// apertar "Ir ao vivo") ao mesmo tempo — são duas conexões
+// completamente separadas (mesh P2P vs SFU), só compartilham o botão
+// Conectar/Sair por conveniência de UX. Tela e câmera adicionam tracks
+// de vídeo às mesmas peer connections do mesh (não são meshes
+// separados, e podem estar ativas ao mesmo tempo); Go Live nunca passa
+// pelo mesh, vai direto pro LiveKit. As conexões vivem nas stores, não
+// neste componente — trocar de canal só esconde os controles, não
+// desconecta (mesmo comportamento do Discord: sair da visão do canal
+// de voz não te tira da chamada). Falta pra uma próxima fatia: uma
+// barra persistente mostrando "conectado em #x" visível de qualquer
+// lugar do app.
 export function VoicePanel({
   channel,
   currentUserId,
@@ -42,7 +48,18 @@ export function VoicePanel({
   const stopScreenShare = useVoiceStore((s) => s.stopScreenShare)
   const toggleVideo = useVoiceStore((s) => s.toggleVideo)
 
-  const [showPicker, setShowPicker] = useState(false)
+  const goLiveStatus = useGoLiveStore((s) => s.status)
+  const goLiveParticipants = useGoLiveStore((s) => s.participants)
+  const isLive = useGoLiveStore((s) => s.isLive)
+  const localLiveStream = useGoLiveStore((s) => s.localStream)
+  const remoteLiveStreams = useGoLiveStore((s) => s.remoteStreams)
+  const goLiveError = useGoLiveStore((s) => s.error)
+  const joinGoLive = useGoLiveStore((s) => s.join)
+  const leaveGoLive = useGoLiveStore((s) => s.leave)
+  const startGoLive = useGoLiveStore((s) => s.startGoLive)
+  const stopGoLive = useGoLiveStore((s) => s.stopGoLive)
+
+  const [pickerTarget, setPickerTarget] = useState<'screen' | 'golive' | null>(null)
 
   const connectedHere = status === 'connected' && activeChannelId === channel.id
   const connectingHere = status === 'connecting' && activeChannelId === channel.id
@@ -56,15 +73,31 @@ export function VoicePanel({
     return member ? `${member.user.username}#${member.user.discriminator}` : 'desconhecido'
   }
 
+  function isParticipantLive(userId: string): boolean {
+    if (userId === currentUserId) return isLive
+    return goLiveParticipants.some((p) => p.userId === userId && p.live)
+  }
+
+  function handleConnect(): void {
+    join(channel.id, currentUserId)
+    joinGoLive(channel.id)
+  }
+
+  function handleLeave(): void {
+    leave()
+    leaveGoLive()
+  }
+
   return (
     <div className="flex flex-1 flex-col items-center gap-4 overflow-y-auto p-6 text-neutral-100">
       <h2 className="text-lg font-semibold">🔊 {channel.name}</h2>
 
       {error && <p className="rounded bg-red-950 px-3 py-2 text-sm text-red-400">{error}</p>}
+      {goLiveError && <p className="rounded bg-red-950 px-3 py-2 text-sm text-red-400">{goLiveError}</p>}
 
       {!connectedHere && (
         <button
-          onClick={() => join(channel.id, currentUserId)}
+          onClick={handleConnect}
           disabled={connectingHere}
           className="rounded bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-indigo-500 disabled:opacity-50"
         >
@@ -82,6 +115,7 @@ export function VoicePanel({
               >
                 <span>{participantName(p.userId)}</span>
                 <span className="flex items-center gap-1 text-neutral-500">
+                  {isParticipantLive(p.userId) && <span title="Ao vivo (Go Live)">🔴</span>}
                   {p.screen_sharing && <span title="Compartilhando tela">🖥️</span>}
                   {(p.userId === currentUserId ? videoEnabled : p.video) && <span title="Câmera ligada">🎥</span>}
                   {(p.userId === currentUserId ? localDeafened : p.deafened) && <span title="Ensurdecido">🙉</span>}
@@ -91,7 +125,7 @@ export function VoicePanel({
             ))}
           </ul>
 
-          <div className="flex gap-2">
+          <div className="flex flex-wrap justify-center gap-2">
             <button
               onClick={toggleMute}
               className="rounded bg-neutral-800 px-4 py-2 text-sm transition hover:bg-neutral-700"
@@ -117,16 +151,24 @@ export function VoicePanel({
               {videoEnabled ? 'Desligar câmera' : 'Ligar câmera'}
             </button>
             <button
-              onClick={() => (screenSharing ? stopScreenShare() : setShowPicker(true))}
+              onClick={() => (screenSharing ? stopScreenShare() : setPickerTarget('screen'))}
               className={`rounded px-4 py-2 text-sm transition ${
-                screenSharing
-                  ? 'bg-red-900 hover:bg-red-800'
-                  : 'bg-neutral-800 hover:bg-neutral-700'
+                screenSharing ? 'bg-red-900 hover:bg-red-800' : 'bg-neutral-800 hover:bg-neutral-700'
               }`}
             >
               {screenSharing ? 'Parar compartilhamento' : 'Compartilhar tela'}
             </button>
-            <button onClick={leave} className="rounded bg-red-900 px-4 py-2 text-sm transition hover:bg-red-800">
+            <button
+              onClick={() => (isLive ? stopGoLive() : setPickerTarget('golive'))}
+              disabled={goLiveStatus !== 'connected' && !isLive}
+              title={goLiveStatus !== 'connected' ? 'Conectando ao Go Live…' : undefined}
+              className={`rounded px-4 py-2 text-sm transition disabled:opacity-40 ${
+                isLive ? 'bg-red-900 hover:bg-red-800' : 'bg-neutral-800 hover:bg-neutral-700'
+              }`}
+            >
+              {isLive ? 'Parar transmissão' : 'Ir ao vivo'}
+            </button>
+            <button onClick={handleLeave} className="rounded bg-red-900 px-4 py-2 text-sm transition hover:bg-red-800">
               Sair
             </button>
           </div>
@@ -147,19 +189,26 @@ export function VoicePanel({
             />
           ))}
 
+          {localLiveStream && <RemoteVideo stream={localLiveStream} label="🔴 Você está ao vivo" muted />}
+          {Object.entries(remoteLiveStreams).map(([peerId, stream]) => (
+            <RemoteVideo key={peerId} stream={stream} label={`🔴 ${participantName(peerId)} está ao vivo`} />
+          ))}
+
           {Object.entries(remoteAudioStreams).map(([peerId, stream]) => (
             <RemoteAudio key={peerId} stream={stream} muted={localDeafened} />
           ))}
         </>
       )}
 
-      {showPicker && (
+      {pickerTarget && (
         <ScreenSharePicker
           onSelect={(sourceId) => {
-            setShowPicker(false)
-            startScreenShare(sourceId)
+            const target = pickerTarget
+            setPickerTarget(null)
+            if (target === 'screen') startScreenShare(sourceId)
+            else startGoLive(sourceId)
           }}
-          onCancel={() => setShowPicker(false)}
+          onCancel={() => setPickerTarget(null)}
         />
       )}
     </div>
