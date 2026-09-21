@@ -1,4 +1,4 @@
-import { app, BrowserWindow, desktopCapturer, ipcMain, safeStorage, session } from 'electron'
+import { app, BrowserWindow, desktopCapturer, ipcMain, Menu, safeStorage, session } from 'electron'
 import { join } from 'node:path'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 
@@ -132,6 +132,13 @@ function createWindow(): void {
 }
 
 app.whenReady().then(() => {
+  // Sem isso, o Electron gera sozinho a barra padrão (File/Edit/View/
+  // Window) — não faz sentido pra um app final sem essas ações (não abre
+  // arquivo, não tem múltiplas janelas de verdade). Título/minimizar/
+  // maximizar/fechar continuam (isso é o frame nativo da janela, não o
+  // menu) — só o menu em si some.
+  Menu.setApplicationMenu(null)
+
   registerSecureStorageHandlers()
   registerPermissionHandlers()
   registerScreenShareHandlers()
