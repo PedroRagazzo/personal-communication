@@ -38,6 +38,7 @@ python/**/.mypy_cache/
 .env
 .env.*
 !.env.example
+!desktop/.env.production
 
 # Editor / SO
 .vscode/
