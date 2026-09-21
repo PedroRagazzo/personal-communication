@@ -60,6 +60,38 @@ defmodule ToraDosBurroWeb.AuthControllerTest do
 
       assert json_response(conn, 401)
     end
+
+    test "autentica só com username + senha, sem discriminator", %{conn: conn, user: user} do
+      conn =
+        post(conn, ~p"/api/v1/auth/login",
+          username: user.username,
+          password: "senha-super-segura"
+        )
+
+      assert %{"access_token" => _, "refresh_token" => _} = json_response(conn, 200)
+    end
+
+    test "pede discriminator quando duas contas têm o mesmo username", %{conn: conn, user: user} do
+      {:ok, _outra_conta} = Accounts.register_user(@user_attrs)
+
+      conn =
+        post(conn, ~p"/api/v1/auth/login",
+          username: user.username,
+          password: "senha-super-segura"
+        )
+
+      assert %{"errors" => %{"detail" => "ambiguous_username"}} = json_response(conn, 422)
+
+      # e o caminho com discriminator continua funcionando pra desempatar
+      retry_conn =
+        post(build_conn(), ~p"/api/v1/auth/login",
+          username: user.username,
+          discriminator: user.discriminator,
+          password: "senha-super-segura"
+        )
+
+      assert %{"access_token" => _} = json_response(retry_conn, 200)
+    end
   end
 
   describe "fluxo completo: registrar -> acessar rota protegida -> refresh -> logout" do

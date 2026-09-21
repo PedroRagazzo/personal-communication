@@ -26,10 +26,9 @@ export function RegisterPage({ onSwitchToLogin }: { onSwitchToLogin: () => void 
         <div>
           <h1 className="text-lg font-semibold text-neutral-100">Criar conta</h1>
           <p className="text-xs text-neutral-500">
-            Sua sessão fica salva neste dispositivo — você não vai precisar entrar de novo. O
-            discriminator (<span className="font-mono">#0001</span>) é atribuído automaticamente;
-            guarde o nome completo (ex.: <span className="font-mono">voce#0001</span>) caso precise
-            entrar de novo manualmente algum dia.
+            Sua sessão fica salva neste dispositivo — você não vai precisar entrar de novo. Se um
+            dia precisar entrar manualmente (outro dispositivo, por exemplo), é só o nome de
+            usuário e a senha.
           </p>
         </div>
 

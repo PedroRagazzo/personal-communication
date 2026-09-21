@@ -67,12 +67,19 @@ export function register(username: string, password: string): Promise<AuthTokens
   })
 }
 
-// Login usa username#discriminator, não email — é o caminho raro de
-// recriar a sessão (o normal é a sessão persistir via secureStorage).
-export function login(username: string, discriminator: string, password: string): Promise<AuthTokens> {
+// Login usa só username (não email) — é o caminho raro de recriar a sessão
+// (o normal é a sessão persistir via secureStorage). `discriminator` só é
+// enviado quando o backend já respondeu "ambiguous_username" pra esse
+// username (duas contas com o mesmo nome) e o cliente está reenviando pra
+// desempatar — ver LoginPage.tsx.
+export function login(
+  username: string,
+  password: string,
+  discriminator?: string
+): Promise<AuthTokens> {
   return request('/auth/login', {
     method: 'POST',
-    body: JSON.stringify({ username, discriminator, password })
+    body: JSON.stringify(discriminator ? { username, discriminator, password } : { username, password })
   })
 }
 

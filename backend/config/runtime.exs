@@ -93,6 +93,12 @@ if config_env() == :prod do
 
   config :tora_dos_burro, ToraDosBurro.Turn, secret: turn_secret, url: turn_url
 
+  # Servidor único de acesso pra todo mundo (sem convite prévio) — opcional
+  # de propósito, diferente de TURN_SECRET/TURN_URL acima: não configurar
+  # não deveria travar o boot do app inteiro, só desliga o auto-join (ver
+  # AuthController.register/2).
+  config :tora_dos_burro, :default_server_id, System.get_env("DEFAULT_SERVER_ID")
+
   config :cors_plug,
     origin: System.get_env("CORS_ORIGIN", "") |> String.split(",", trim: true)
 

@@ -90,4 +90,34 @@ defmodule ToraDosBurro.AccountsTest do
                Accounts.authenticate_user("ninguem", "0001", "qualquer-senha")
     end
   end
+
+  describe "authenticate_user/2 (sem discriminator)" do
+    test "autentica direto quando só existe uma conta com esse username" do
+      {:ok, user} = Accounts.register_user(@no_email_attrs)
+
+      assert {:ok, authenticated} =
+               Accounts.authenticate_user(user.username, "senha-super-segura")
+
+      assert authenticated.id == user.id
+    end
+
+    test "rejeita senha errada" do
+      {:ok, user} = Accounts.register_user(@no_email_attrs)
+
+      assert {:error, :unauthorized} =
+               Accounts.authenticate_user(user.username, "senha-errada")
+    end
+
+    test "rejeita conta inexistente" do
+      assert {:error, :unauthorized} = Accounts.authenticate_user("ninguem", "qualquer-senha")
+    end
+
+    test "responde :ambiguous_username quando duas contas têm o mesmo nome, sem testar a senha contra nenhuma delas" do
+      {:ok, _user1} = Accounts.register_user(@no_email_attrs)
+      {:ok, _user2} = Accounts.register_user(@no_email_attrs)
+
+      assert {:error, :ambiguous_username} =
+               Accounts.authenticate_user("pedro", "senha-super-segura")
+    end
+  end
 end

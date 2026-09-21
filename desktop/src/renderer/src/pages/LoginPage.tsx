@@ -1,32 +1,29 @@
 import { useState, type FormEvent } from 'react'
 import { useAuthStore } from '../stores/authStore'
+import * as api from '../services/api'
 
 // Caminho raro de recuperação — o normal é a sessão persistir sozinha (ver
-// RegisterPage). Login usa username#discriminator, não email (o cliente
-// nunca pede/guarda email do usuário).
+// RegisterPage). Login pede só usuário+senha; o discriminator só aparece se
+// o backend responder "ambiguous_username" (duas contas com o mesmo nome),
+// caso raro nesse deploy de grupo pequeno e conhecido.
 export function LoginPage({ onSwitchToRegister }: { onSwitchToRegister: () => void }) {
   const login = useAuthStore((s) => s.login)
   const error = useAuthStore((s) => s.error)
-  const [identifier, setIdentifier] = useState('')
+  const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
-  const [formError, setFormError] = useState<string | null>(null)
+  const [discriminator, setDiscriminator] = useState('')
+  const [needsDiscriminator, setNeedsDiscriminator] = useState(false)
   const [submitting, setSubmitting] = useState(false)
 
   async function handleSubmit(e: FormEvent): Promise<void> {
     e.preventDefault()
-    setFormError(null)
-
-    const [username, discriminator, ...rest] = identifier.trim().split('#')
-    if (!username || !discriminator || rest.length > 0) {
-      setFormError('Digite no formato usuário#0001')
-      return
-    }
-
     setSubmitting(true)
     try {
-      await login(username, discriminator, password)
-    } catch {
-      // erro do servidor já fica em `error`, exibido abaixo
+      await login(username.trim(), password, needsDiscriminator ? discriminator.trim() : undefined)
+    } catch (err) {
+      if (err instanceof api.ApiError && err.message === 'ambiguous_username') {
+        setNeedsDiscriminator(true)
+      }
     } finally {
       setSubmitting(false)
     }
@@ -42,25 +39,49 @@ export function LoginPage({ onSwitchToRegister }: { onSwitchToRegister: () => vo
           </p>
         </div>
 
-        {(formError || error) && (
-          <p className="rounded bg-red-950 px-3 py-2 text-sm text-red-400">{formError ?? error}</p>
+        {error && !needsDiscriminator && (
+          <p className="rounded bg-red-950 px-3 py-2 text-sm text-red-400">{error}</p>
+        )}
+        {needsDiscriminator && (
+          <p className="rounded bg-amber-950 px-3 py-2 text-sm text-amber-400">
+            Existe mais de uma conta com esse nome de usuário — digite também o código de 4 dígitos
+            (ex.: 0001) pra saber qual é a sua.
+          </p>
         )}
 
         <div className="space-y-1">
-          <label className="text-xs text-neutral-400" htmlFor="login-identifier">
-            Usuário#discriminator
+          <label className="text-xs text-neutral-400" htmlFor="login-username">
+            Nome de usuário
           </label>
           <input
-            id="login-identifier"
+            id="login-username"
             type="text"
             required
             autoFocus
-            placeholder="usuario#0001"
-            value={identifier}
-            onChange={(e) => setIdentifier(e.target.value)}
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
             className="w-full rounded bg-neutral-700 px-3 py-2 text-neutral-100 outline-none focus:ring-2 focus:ring-indigo-500"
           />
         </div>
+
+        {needsDiscriminator && (
+          <div className="space-y-1">
+            <label className="text-xs text-neutral-400" htmlFor="login-discriminator">
+              Código (4 dígitos)
+            </label>
+            <input
+              id="login-discriminator"
+              type="text"
+              required
+              placeholder="0001"
+              minLength={4}
+              maxLength={4}
+              value={discriminator}
+              onChange={(e) => setDiscriminator(e.target.value)}
+              className="w-full rounded bg-neutral-700 px-3 py-2 text-neutral-100 outline-none focus:ring-2 focus:ring-indigo-500"
+            />
+          </div>
+        )}
 
         <div className="space-y-1">
           <label className="text-xs text-neutral-400" htmlFor="login-password">

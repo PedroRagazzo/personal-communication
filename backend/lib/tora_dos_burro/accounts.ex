@@ -3,6 +3,8 @@ defmodule ToraDosBurro.Accounts do
   Contexto de contas: cadastro e autenticação de usuários.
   """
 
+  import Ecto.Query
+
   alias ToraDosBurro.Repo
   alias ToraDosBurro.Accounts.User
 
@@ -24,6 +26,10 @@ defmodule ToraDosBurro.Accounts do
   def get_user_by_username_and_discriminator(username, discriminator)
       when is_binary(username) and is_binary(discriminator) do
     Repo.get_by(User, username: username, discriminator: discriminator)
+  end
+
+  defp get_users_by_username(username) when is_binary(username) do
+    Repo.all(from u in User, where: u.username == ^username)
   end
 
   @max_discriminator_attempts 20
@@ -89,6 +95,35 @@ defmodule ToraDosBurro.Accounts do
       true ->
         Argon2.no_user_verify()
         {:error, :unauthorized}
+    end
+  end
+
+  @doc """
+  Autentica só por username + senha (sem discriminator) — caminho normal de
+  login pedido pelo usuário. Username não é único sozinho (dois usuários
+  podem escolher o mesmo nome, ver `insert_with_discriminator/2`), então:
+  nenhuma conta com esse nome -> `:unauthorized` (mesmo timing-safe no-op de
+  sempre); uma só -> autentica normalmente; duas ou mais -> `:ambiguous_username`,
+  pra o cliente pedir o discriminator só nesse caso raro e cair no
+  `authenticate_user/3` acima. Nunca tenta a senha contra várias contas pra
+  "adivinhar" qual é — isso poderia logar alguém na conta errada se, por
+  coincidência, duas pessoas com o mesmo nome tiverem a mesma senha.
+  """
+  def authenticate_user(username, password) do
+    case get_users_by_username(username) do
+      [] ->
+        Argon2.no_user_verify()
+        {:error, :unauthorized}
+
+      [user] ->
+        if Argon2.verify_pass(password, user.password_hash) do
+          {:ok, user}
+        else
+          {:error, :unauthorized}
+        end
+
+      [_ | _] ->
+        {:error, :ambiguous_username}
     end
   end
 end
