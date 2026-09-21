@@ -5,42 +5,30 @@
 # precisa não convive bem com o routing mesh do Swarm — ver docs/roadmap.md,
 # item 10, "Achado, não corrigido ainda").
 #
-# Sem arquivo de config montado: todas as opções vêm por linha de comando
-# (`-n` = não carregar nenhum turnserver.conf), porque a interpolação de
-# variável `${TURN_SECRET}` do Docker Compose só vale para o próprio YAML do
-# compose — não alcançaria um arquivo à parte montado como volume.
-# TURN_SECRET vem da aba "Environment" deste serviço no Dokploy (nunca
+# Config via arquivo montado (turnserver.prod.conf, mesmo diretório) + UM
+# único override de linha de comando pro segredo. Tentativa anterior (só
+# linha de comando, sem arquivo, com `-n`) fez o turnserver travar em loop de
+# reinício (exit 255, despejando o próprio --help) — o parser de CLI
+# (getopt_long) claramente não aceitou algo naquela lista longa de flags. Só
+# `-c <arquivo> --static-auth-secret=<valor>` reduz a superfície pro parser
+# de CLI a uma única flag, testada isoladamente (todas as outras diretivas
+# vão pelo parser do arquivo de config, o mesmo já usado sem problema em
+# desenvolvimento desde a FASE 6).
+#
+# ${TURN_SECRET} vem da aba "Environment" deste serviço no Dokploy (nunca
 # commitado aqui) e precisa ser EXATAMENTE igual ao TURN_SECRET do serviço
 # `backend` — é o mesmo segredo dos dois lados do HMAC da TURN REST API (ver
-# backend/lib/tora_dos_burro/turn.ex).
-#
-# external-ip não é usado: a VPS tem IP público direto na interface de rede,
-# sem NAT (confirmado na doc oficial — external-ip é só para mapeamento de
-# endereço interno/externo quando o servidor está atrás de NAT:
-# https://github.com/coturn/coturn/wiki/turnserver).
-#
-# Porta de relay: min-port/max-port não definidos, usa o default do coturn
-# (49152-65535, conforme RFC 5766 — mesma doc acima).
-#
-# Sem TLS (--no-tls/--no-dtls): mesma decisão do resto desse deploy, que
-# ainda não tem domínio/certificado (ver força_ssl em backend/config/prod.exs
-# e docs/roadmap.md item 10).
+# backend/lib/tora_dos_burro/turn.ex). O arquivo montado não tem nenhum
+# static-auth-secret — só essa única fonte, pra nunca divergir em silêncio.
 
 services:
   coturn:
     image: coturn/coturn:latest
     restart: unless-stopped
     network_mode: host
+    volumes:
+      - ./turnserver.prod.conf:/etc/coturn/turnserver.conf:ro
     command:
-      - -n
-      - --listening-port=3478
-      - --fingerprint
-      - --lt-cred-mech
-      - --use-auth-secret
+      - -c
+      - /etc/coturn/turnserver.conf
       - --static-auth-secret=${TURN_SECRET}
-      - --realm=tora-dos-burro
-      - --no-multicast-peers
-      - --total-quota=100
-      - --stale-nonce=600
-      - --no-tls
-      - --no-dtls
