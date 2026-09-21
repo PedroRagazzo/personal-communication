@@ -1,0 +1,46 @@
+# Deploy de produção do coturn (TURN/STUN), via Dokploy — Compose Type
+# "Docker Compose" (não "Stack"/Swarm), rodando com `docker compose` puro
+# direto no host da VPS. É isso que permite usar `network_mode: host` sem as
+# limitações de rede do Docker Swarm (a faixa larga de portas UDP que o TURN
+# precisa não convive bem com o routing mesh do Swarm — ver docs/roadmap.md,
+# item 10, "Achado, não corrigido ainda").
+#
+# Sem arquivo de config montado: todas as opções vêm por linha de comando
+# (`-n` = não carregar nenhum turnserver.conf), porque a interpolação de
+# variável `${TURN_SECRET}` do Docker Compose só vale para o próprio YAML do
+# compose — não alcançaria um arquivo à parte montado como volume.
+# TURN_SECRET vem da aba "Environment" deste serviço no Dokploy (nunca
+# commitado aqui) e precisa ser EXATAMENTE igual ao TURN_SECRET do serviço
+# `backend` — é o mesmo segredo dos dois lados do HMAC da TURN REST API (ver
+# backend/lib/tora_dos_burro/turn.ex).
+#
+# external-ip não é usado: a VPS tem IP público direto na interface de rede,
+# sem NAT (confirmado na doc oficial — external-ip é só para mapeamento de
+# endereço interno/externo quando o servidor está atrás de NAT:
+# https://github.com/coturn/coturn/wiki/turnserver).
+#
+# Porta de relay: min-port/max-port não definidos, usa o default do coturn
+# (49152-65535, conforme RFC 5766 — mesma doc acima).
+#
+# Sem TLS (--no-tls/--no-dtls): mesma decisão do resto desse deploy, que
+# ainda não tem domínio/certificado (ver força_ssl em backend/config/prod.exs
+# e docs/roadmap.md item 10).
+
+services:
+  coturn:
+    image: coturn/coturn:latest
+    restart: unless-stopped
+    network_mode: host
+    command:
+      - -n
+      - --listening-port=3478
+      - --fingerprint
+      - --lt-cred-mech
+      - --use-auth-secret
+      - --static-auth-secret=${TURN_SECRET}
+      - --realm=tora-dos-burro
+      - --no-multicast-peers
+      - --total-quota=100
+      - --stale-nonce=600
+      - --no-tls
+      - --no-dtls
