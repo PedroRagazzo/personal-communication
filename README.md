@@ -4,7 +4,7 @@ Plataforma de comunicação em tempo real (estilo Discord): servidores/comunidad
 
 ## Download
 
-**[TORA DOS BURRO v1.0.1 (Windows)](https://github.com/PedroRagazzo/tora-dos-burro/releases/tag/v1.0.1)** — instalador `.exe`, não precisa de admin. O Windows vai avisar "editor desconhecido" (SmartScreen) na primeira execução — esperado, o instalador não é assinado; "Mais informações" → "Executar assim mesmo". Depois de instalar, crie sua conta e peça um convite pro dono do servidor pra entrar. (A v1.0.0 tinha um bug real — apontava pro backend local por engano, não funcionava contra o servidor de verdade; use a v1.0.1.)
+**[TORA DOS BURRO v1.0.2 (Windows)](https://github.com/PedroRagazzo/tora-dos-burro/releases/tag/v1.0.2)** — instalador `.exe`, não precisa de admin. O Windows vai avisar "editor desconhecido" (SmartScreen) na primeira execução — esperado, o instalador não é assinado; "Mais informações" → "Executar assim mesmo". Depois de instalar, é só criar a conta (usuário + senha) — já entra direto, sem precisar logar de novo e sem precisar de convite: toda conta nova já cai automaticamente no servidor "TORA DOS BURRO". (v1.0.0 tinha um bug real, apontava pro backend local por engano; v1.0.1 exigia `usuário#0001` pra logar e convite pra entrar no servidor — use a v1.0.2.)
 
 O backend roda numa VPS real (`http://2.28.229.48`, sem domínio ainda — ver `docs/roadmap.md`), não é mais só local.
 
