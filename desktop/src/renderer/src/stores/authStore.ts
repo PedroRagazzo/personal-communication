@@ -1,11 +1,47 @@
 import { create } from 'zustand'
 import * as api from '../services/api'
-import { connectSocket, disconnectSocket } from '../services/socket'
+import { connectSocket, disconnectSocket, updateSocketToken } from '../services/socket'
 import { useServersStore } from './serversStore'
 import { useChatStore } from './chatStore'
 
 const ACCESS_TOKEN_KEY = 'access_token'
 const REFRESH_TOKEN_KEY = 'refresh_token'
+
+// Access token dura 15min (AuthController.tokens/1) — renova a cada 10 pra
+// sobrar margem. Sem isso, qualquer sessão de voz/chat aberta por mais
+// tempo que isso ficava com o token vencido assim que o socket precisasse
+// reconectar (queda de rede, deploy no servidor), travando em
+// "Conectando…" pra sempre (handshake do WS rejeitado com 403 — achado ao
+// vivo num app de verdade, não em teste automatizado).
+const TOKEN_REFRESH_INTERVAL_MS = 10 * 60 * 1000
+
+let refreshTimer: ReturnType<typeof setInterval> | null = null
+
+function startTokenRefreshLoop(refreshToken: string): void {
+  stopTokenRefreshLoop()
+  refreshTimer = setInterval(async () => {
+    try {
+      const { access_token } = await api.refresh(refreshToken)
+      await window.api.secureStorage.set(ACCESS_TOKEN_KEY, access_token)
+      updateSocketToken(access_token)
+      useAuthStore.setState({ accessToken: access_token })
+    } catch (err) {
+      // 401 = refresh token mesmo inválido/revogado (não uma falha de rede
+      // passageira) — só nesse caso força logout; outros erros só tentam
+      // de novo no próximo ciclo.
+      if (err instanceof api.ApiError && err.status === 401) {
+        useAuthStore.getState().logout()
+      }
+    }
+  }, TOKEN_REFRESH_INTERVAL_MS)
+}
+
+function stopTokenRefreshLoop(): void {
+  if (refreshTimer) {
+    clearInterval(refreshTimer)
+    refreshTimer = null
+  }
+}
 
 interface AuthState {
   status: 'loading' | 'authenticated' | 'unauthenticated'
@@ -45,6 +81,7 @@ export const useAuthStore = create<AuthState>((set) => ({
       try {
         const user = await api.me(accessToken)
         connectSocket(accessToken)
+        startTokenRefreshLoop(refreshToken)
         set({ status: 'authenticated', user, accessToken })
         return
       } catch (err) {
@@ -53,6 +90,7 @@ export const useAuthStore = create<AuthState>((set) => ({
           const user = await api.me(access_token)
           await window.api.secureStorage.set(ACCESS_TOKEN_KEY, access_token)
           connectSocket(access_token)
+          startTokenRefreshLoop(refreshToken)
           set({ status: 'authenticated', user, accessToken: access_token })
           return
         }
@@ -88,6 +126,7 @@ export const useAuthStore = create<AuthState>((set) => ({
   },
 
   logout: async () => {
+    stopTokenRefreshLoop()
     const refreshToken = await window.api.secureStorage.get(REFRESH_TOKEN_KEY)
     if (refreshToken) {
       await api.logout(refreshToken).catch(() => {})
@@ -116,5 +155,6 @@ async function persistAndSetAuthenticated(tokens: api.AuthTokens): Promise<void>
   // tokens não traz) em vez de confiar no `user` parcial do register/login.
   const user = await api.me(tokens.access_token)
   connectSocket(tokens.access_token)
+  startTokenRefreshLoop(tokens.refresh_token)
   useAuthStore.setState({ status: 'authenticated', accessToken: tokens.access_token, user })
 }

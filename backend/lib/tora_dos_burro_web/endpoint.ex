@@ -15,7 +15,17 @@ defmodule ToraDosBurroWeb.Endpoint do
     websocket: [connect_info: [session: @session_options]],
     longpoll: [connect_info: [session: @session_options]]
 
-  socket "/socket", ToraDosBurroWeb.UserSocket, websocket: true
+  # `check_origin: false`: essa checagem protege contra um site malicioso
+  # abrindo WebSocket usando a *sessão de navegador* de alguém (cookie) —
+  # não se aplica aqui, o cliente nunca é um navegador (é o app Electron) e
+  # a autenticação é só o token Guardian no query param, nunca cookie (ver
+  # UserSocket.connect/3). Sem isso, todo handshake vindo do app empacotado
+  # falhava com 403 — Origin de um `file://` nunca bate com nenhum host
+  # configurado. Só em dev não aparecia porque o Endpoint inteiro já roda
+  # com check_origin: false lá (boilerplate padrão do `mix phx.new`, sem
+  # relação com o motivo real daqui) — nunca foi testado de verdade contra
+  # produção antes.
+  socket "/socket", ToraDosBurroWeb.UserSocket, websocket: [check_origin: false]
 
   # Serve at "/" the static files from "priv/static" directory.
   #
