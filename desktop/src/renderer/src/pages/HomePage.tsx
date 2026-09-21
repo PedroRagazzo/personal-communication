@@ -36,7 +36,7 @@ export function HomePage() {
   const selectedChannel = channels.find((c) => c.id === selectedChannelId) ?? null
 
   return (
-    <div className="flex h-screen bg-neutral-900 text-neutral-100">
+    <div className="flex h-screen bg-void text-mist">
       <ServerSidebar
         servers={servers}
         selectedServerId={selectedServerId}
@@ -53,27 +53,27 @@ export function HomePage() {
         onCreate={(name, type) => createChannel(accessToken, name, type)}
       />
       <div className="flex flex-1 flex-col">
-        <header className="flex items-center justify-between border-b border-neutral-800 px-4 py-3">
-          <span className="font-semibold">
+        <header className="flex items-center justify-between border-b border-line-soft bg-panel px-4 py-3">
+          <span className="font-display text-sm font-bold tracking-wide text-mist">
             {selectedChannel ? (
               <>
-                <span className="text-neutral-500">{selectedChannel.type === 'guild_voice' ? '🔊' : '#'}</span>{' '}
+                <span className="text-volt">{selectedChannel.type === 'guild_voice' ? '🔊' : '#'}</span>{' '}
                 {selectedChannel.name}
               </>
             ) : (
-              <span className="text-neutral-500">Selecione um canal</span>
+              <span className="text-mist-faint">Selecione um canal</span>
             )}
           </span>
-          <div className="flex items-center gap-3 text-sm text-neutral-400">
-            <span>
+          <div className="flex items-center gap-3 text-sm">
+            <span className="font-medium text-mist">
               {user.username}
-              <span className="text-neutral-600">#{user.discriminator}</span>
+              <span className="font-mono text-xs text-mist-dim">#{user.discriminator}</span>
             </span>
             <button
               onClick={() => logout()}
-              className="rounded bg-neutral-800 px-3 py-1 transition hover:bg-neutral-700"
+              className="border border-line px-3 py-1 font-mono text-xs tracking-wide text-mist-dim transition hover:border-plasma/60 hover:text-plasma"
             >
-              Sair
+              SAIR
             </button>
           </div>
         </header>
@@ -89,7 +89,7 @@ export function HomePage() {
           <VoicePanel channel={selectedChannel} currentUserId={user.id} members={members} />
         )}
         {!selectedChannel && (
-          <div className="flex flex-1 items-center justify-center text-neutral-600">
+          <div className="rig-grid flex flex-1 items-center justify-center text-mist-faint">
             Nenhum canal selecionado
           </div>
         )}

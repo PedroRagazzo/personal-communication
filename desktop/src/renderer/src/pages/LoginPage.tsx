@@ -30,89 +30,102 @@ export function LoginPage({ onSwitchToRegister }: { onSwitchToRegister: () => vo
   }
 
   return (
-    <div className="flex h-screen items-center justify-center bg-neutral-900">
-      <form onSubmit={handleSubmit} className="w-80 space-y-4 rounded-lg bg-neutral-800 p-6 shadow-xl">
-        <div>
-          <h1 className="text-lg font-semibold text-neutral-100">Entrar — TORA DOS BURRO</h1>
-          <p className="text-xs text-neutral-500">
-            Só precisa disso se a sessão salva se perdeu (dados limpos, outro dispositivo).
-          </p>
+    <div className="rig-grid flex h-screen items-center justify-center bg-void">
+      <div className="w-[380px]">
+        <div className="mb-6 flex items-center gap-3">
+          <div className="bevel-sm flex h-11 w-11 shrink-0 items-center justify-center bg-volt text-void">
+            <span className="font-display text-xl font-bold">T</span>
+          </div>
+          <div className="leading-none">
+            <p className="font-display text-xl font-bold tracking-wide text-mist">TORA</p>
+            <p className="font-mono text-[11px] tracking-[0.3em] text-mist-dim">DOS BURRO</p>
+          </div>
         </div>
 
-        {error && !needsDiscriminator && (
-          <p className="rounded bg-red-950 px-3 py-2 text-sm text-red-400">{error}</p>
-        )}
-        {needsDiscriminator && (
-          <p className="rounded bg-amber-950 px-3 py-2 text-sm text-amber-400">
-            Existe mais de uma conta com esse nome de usuário — digite também o código de 4 dígitos
-            (ex.: 0001) pra saber qual é a sua.
-          </p>
-        )}
+        <form
+          onSubmit={handleSubmit}
+          className="bevel space-y-5 border border-line bg-panel p-7 shadow-2xl shadow-black/40"
+        >
+          <div>
+            <p className="font-mono text-[11px] tracking-[0.25em] text-volt">RECUPERAR SESSÃO</p>
+            <h1 className="mt-1 font-display text-2xl font-semibold text-mist">Entrar</h1>
+            <p className="mt-2 text-xs leading-relaxed text-mist-dim">
+              Só precisa disso se a sessão salva se perdeu (dados limpos, outro dispositivo).
+            </p>
+          </div>
 
-        <div className="space-y-1">
-          <label className="text-xs text-neutral-400" htmlFor="login-username">
-            Nome de usuário
-          </label>
-          <input
-            id="login-username"
-            type="text"
-            required
-            autoFocus
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
-            className="w-full rounded bg-neutral-700 px-3 py-2 text-neutral-100 outline-none focus:ring-2 focus:ring-indigo-500"
-          />
-        </div>
+          {error && !needsDiscriminator && (
+            <p className="border-l-2 border-plasma bg-plasma/10 px-3 py-2 text-sm text-plasma">
+              {error}
+            </p>
+          )}
+          {needsDiscriminator && (
+            <p className="border-l-2 border-volt bg-volt/10 px-3 py-2 text-xs leading-relaxed text-volt">
+              Existe mais de uma conta com esse nome de usuário — digite também o código de 4
+              dígitos (ex.: 0001) pra saber qual é a sua.
+            </p>
+          )}
 
-        {needsDiscriminator && (
-          <div className="space-y-1">
-            <label className="text-xs text-neutral-400" htmlFor="login-discriminator">
-              Código (4 dígitos)
-            </label>
+          <label className="block space-y-1.5">
+            <span className="font-mono text-[10px] tracking-[0.2em] text-mist-dim">
+              NOME DE USUÁRIO
+            </span>
             <input
-              id="login-discriminator"
               type="text"
               required
-              placeholder="0001"
-              minLength={4}
-              maxLength={4}
-              value={discriminator}
-              onChange={(e) => setDiscriminator(e.target.value)}
-              className="w-full rounded bg-neutral-700 px-3 py-2 text-neutral-100 outline-none focus:ring-2 focus:ring-indigo-500"
+              autoFocus
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              className="w-full border border-line bg-panel-2 px-3 py-2.5 text-sm text-mist outline-none transition focus:border-volt"
             />
-          </div>
-        )}
-
-        <div className="space-y-1">
-          <label className="text-xs text-neutral-400" htmlFor="login-password">
-            Senha
           </label>
-          <input
-            id="login-password"
-            type="password"
-            required
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className="w-full rounded bg-neutral-700 px-3 py-2 text-neutral-100 outline-none focus:ring-2 focus:ring-indigo-500"
-          />
-        </div>
 
-        <button
-          type="submit"
-          disabled={submitting}
-          className="w-full rounded bg-indigo-600 py-2 font-medium text-white transition hover:bg-indigo-500 disabled:opacity-50"
-        >
-          {submitting ? 'Entrando…' : 'Entrar'}
-        </button>
+          {needsDiscriminator && (
+            <label className="block space-y-1.5">
+              <span className="font-mono text-[10px] tracking-[0.2em] text-volt">
+                CÓDIGO (4 DÍGITOS)
+              </span>
+              <input
+                type="text"
+                required
+                placeholder="0001"
+                minLength={4}
+                maxLength={4}
+                value={discriminator}
+                onChange={(e) => setDiscriminator(e.target.value)}
+                className="w-full border border-volt/50 bg-panel-2 px-3 py-2.5 font-mono text-sm text-mist outline-none transition focus:border-volt"
+              />
+            </label>
+          )}
 
-        <button
-          type="button"
-          onClick={onSwitchToRegister}
-          className="w-full text-center text-xs text-neutral-400 hover:text-neutral-200"
-        >
-          Não tem conta? Cadastre-se
-        </button>
-      </form>
+          <label className="block space-y-1.5">
+            <span className="font-mono text-[10px] tracking-[0.2em] text-mist-dim">SENHA</span>
+            <input
+              type="password"
+              required
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="w-full border border-line bg-panel-2 px-3 py-2.5 text-sm text-mist outline-none transition focus:border-volt"
+            />
+          </label>
+
+          <button
+            type="submit"
+            disabled={submitting}
+            className="bevel-sm w-full bg-volt py-2.5 font-display text-sm font-bold tracking-[0.15em] text-void transition hover:bg-volt-soft disabled:opacity-50"
+          >
+            {submitting ? 'ENTRANDO…' : 'ENTRAR'}
+          </button>
+
+          <button
+            type="button"
+            onClick={onSwitchToRegister}
+            className="w-full text-center text-xs text-mist-dim transition hover:text-mist"
+          >
+            Não tem conta? <span className="text-volt">Cadastre-se</span>
+          </button>
+        </form>
+      </div>
     </div>
   )
 }

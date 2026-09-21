@@ -22,36 +22,37 @@ export function JoinServerDialog({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={onCancel}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-void/80" onClick={onCancel}>
       <div
-        className="w-[360px] rounded-lg bg-neutral-800 p-4 shadow-xl"
+        className="bevel w-[360px] border border-line bg-panel p-5 shadow-2xl shadow-black/50"
         onClick={(e) => e.stopPropagation()}
       >
-        <h3 className="mb-3 text-sm font-semibold text-neutral-100">Entrar em um servidor</h3>
+        <p className="font-mono text-[10px] tracking-[0.25em] text-volt">CONVITE</p>
+        <h3 className="mb-3 mt-1 font-display text-lg font-bold text-mist">Entrar em um servidor</h3>
 
-        <form onSubmit={handleSubmit} className="space-y-2">
+        <form onSubmit={handleSubmit} className="space-y-3">
           <input
             autoFocus
             value={code}
             onChange={(e) => setCode(e.target.value)}
             placeholder="código do convite"
-            className="w-full rounded bg-neutral-900 px-2 py-1.5 text-sm text-neutral-100 outline-none focus:ring-2 focus:ring-indigo-500"
+            className="w-full border border-line bg-panel-2 px-2.5 py-2 text-sm text-mist outline-none transition focus:border-volt"
           />
-          {error && <p className="text-xs text-red-400">{error}</p>}
+          {error && <p className="text-xs text-plasma">{error}</p>}
           <div className="flex gap-2 pt-1">
             <button
               type="button"
               onClick={onCancel}
-              className="flex-1 rounded bg-neutral-700 px-2 py-1.5 text-xs text-neutral-300 transition hover:bg-neutral-600"
+              className="flex-1 border border-line px-2 py-1.5 font-display text-xs font-bold tracking-wide text-mist-dim transition hover:border-mist-dim hover:text-mist"
             >
-              Cancelar
+              CANCELAR
             </button>
             <button
               type="submit"
               disabled={!code.trim() || submitting}
-              className="flex-1 rounded bg-indigo-600 px-2 py-1.5 text-xs font-medium text-white transition hover:bg-indigo-500 disabled:opacity-40"
+              className="bevel-sm flex-1 bg-volt px-2 py-1.5 font-display text-xs font-bold tracking-wide text-void transition hover:bg-volt-soft disabled:opacity-40"
             >
-              {submitting ? 'Entrando…' : 'Entrar'}
+              {submitting ? 'ENTRANDO…' : 'ENTRAR'}
             </button>
           </div>
         </form>

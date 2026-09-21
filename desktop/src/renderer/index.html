@@ -15,11 +15,20 @@
          docs/roadmap.md) — sem domínio ainda, por isso http:// puro (não
          https://) e via IP direto. Troca pra um domínio real quando esse
          deploy ganhar um. -->
+    <!-- style-src/font-src incluem o Google Fonts (fonts.googleapis.com +
+         fonts.gstatic.com) pro sistema de tipografia da interface — mesma
+         classe de gotcha de CSP já documentada nesse projeto (connect-src
+         pro LiveKit): sem isso a fonte falha em silêncio, cai pro fallback
+         do SO, sem erro visível fora do console. -->
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' http://localhost:4000 ws://localhost:4000 ws://localhost:5173 ws://localhost:7880 http://localhost:7880 http://2.28.229.48 ws://2.28.229.48 wss: https:;"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' http://localhost:4000 ws://localhost:4000 ws://localhost:5173 ws://localhost:7880 http://localhost:7880 http://2.28.229.48 ws://2.28.229.48 wss: https:;"
     />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap"
+    />
     <title>TORA DOS BURRO</title>
   </head>
   <body>

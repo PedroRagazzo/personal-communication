@@ -1,1 +1,118 @@
 @import "tailwindcss";
+
+/* Fonte carregada via <link> em index.html, não @import aqui — o CSS
+   gerado (Tailwind + Lightning CSS) não garante que um @import de CSS
+   continue sendo a primeira regra depois de expandir "tailwindcss",
+   o que é exigido pela spec (achado no build de produção, warning real,
+   não só estético). <link> no HTML não tem essa restrição. */
+
+/* Sistema visual "rig" — não é o roxo-neon-em-fundo-preto padrão de clone
+   de Discord. Dupla de cor com significado (volt = estado bom/ativo,
+   plasma = estado quente/ao vivo/perigo), corte chanfrado no canto
+   superior direito como assinatura estrutural repetida (em vez de
+   cantos arredondados em tudo), tipografia técnica (Chakra Petch pra
+   títulos, Manrope pro corpo, JetBrains Mono pra discriminator/hora). */
+@theme {
+  --color-void: #0a0a10;
+  --color-panel: #131219;
+  --color-panel-2: #1b1a24;
+  --color-panel-3: #242230;
+  --color-line: #2d2b3a;
+  --color-line-soft: #201f2a;
+
+  --color-volt: #d6ff3f;
+  --color-volt-soft: #a9d62b;
+  --color-plasma: #ff3e7f;
+  --color-plasma-soft: #cc2f65;
+
+  --color-mist: #e4e2f1;
+  --color-mist-dim: #8b899c;
+  --color-mist-faint: #57556a;
+
+  --font-display: "Chakra Petch", "Arial Narrow", sans-serif;
+  --font-sans: "Manrope", "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "Cascadia Code", monospace;
+}
+
+@layer base {
+  body {
+    background-color: var(--color-void);
+    color: var(--color-mist);
+    font-family: var(--font-sans);
+    font-feature-settings: "ss01" 1;
+  }
+
+  ::selection {
+    background-color: var(--color-volt);
+    color: var(--color-void);
+  }
+
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background-color: var(--color-panel-3);
+    border: 2px solid var(--color-void);
+    border-radius: 999px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background-color: var(--color-line);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-volt);
+    outline-offset: 2px;
+  }
+}
+
+/* Corte chanfrado no canto superior direito — a assinatura estrutural do
+   app. Usado em superfícies grandes (cards, painéis, botões primários),
+   nunca em elementos pequenos (ícones, pills de reação) onde o corte
+   viraria ruído em vez de identidade. Três tamanhos pro corte escalar
+   com a superfície. */
+@utility bevel {
+  clip-path: polygon(0 0, calc(100% - 18px) 0, 100% 18px, 100% 100%, 0 100%);
+}
+@utility bevel-sm {
+  clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 0 100%);
+}
+@utility bevel-lg {
+  clip-path: polygon(0 0, calc(100% - 28px) 0, 100% 28px, 100% 100%, 0 100%);
+}
+
+/* Textura de fundo sutil — nada de partícula/gradiente animado, só uma
+   grade técnica quase imperceptível que reforça o "painel de controle"
+   sem competir com o conteúdo. */
+@utility rig-grid {
+  background-image:
+    linear-gradient(var(--color-line-soft) 1px, transparent 1px),
+    linear-gradient(90deg, var(--color-line-soft) 1px, transparent 1px);
+  background-size: 28px 28px;
+  background-position: center;
+}
+
+@utility glow-volt {
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--color-volt) 40%, transparent),
+    0 0 24px -8px color-mix(in srgb, var(--color-volt) 70%, transparent);
+}
+@utility glow-plasma {
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--color-plasma) 45%, transparent),
+    0 0 24px -6px color-mix(in srgb, var(--color-plasma) 80%, transparent);
+}
+
+@keyframes pulse-live {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.55;
+  }
+}
+@utility animate-pulse-live {
+  animation: pulse-live 1.6s ease-in-out infinite;
+}

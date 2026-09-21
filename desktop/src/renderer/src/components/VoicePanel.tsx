@@ -89,87 +89,111 @@ export function VoicePanel({
   }
 
   return (
-    <div className="flex flex-1 flex-col items-center gap-4 overflow-y-auto p-6 text-neutral-100">
-      <h2 className="text-lg font-semibold">🔊 {channel.name}</h2>
+    <div className="rig-grid flex flex-1 flex-col items-center gap-5 overflow-y-auto bg-void p-6">
+      <div className="flex items-center gap-2">
+        <span className="text-volt">🔊</span>
+        <h2 className="font-display text-lg font-bold tracking-wide text-mist">{channel.name}</h2>
+      </div>
 
-      {error && <p className="rounded bg-red-950 px-3 py-2 text-sm text-red-400">{error}</p>}
-      {goLiveError && <p className="rounded bg-red-950 px-3 py-2 text-sm text-red-400">{goLiveError}</p>}
+      {error && (
+        <p className="border-l-2 border-plasma bg-plasma/10 px-3 py-2 text-sm text-plasma">{error}</p>
+      )}
+      {goLiveError && (
+        <p className="border-l-2 border-plasma bg-plasma/10 px-3 py-2 text-sm text-plasma">
+          {goLiveError}
+        </p>
+      )}
 
       {!connectedHere && (
         <button
           onClick={handleConnect}
           disabled={connectingHere}
-          className="rounded bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-indigo-500 disabled:opacity-50"
+          className="bevel bg-volt px-8 py-3 font-display text-sm font-bold tracking-[0.15em] text-void transition hover:bg-volt-soft disabled:opacity-50"
         >
-          {connectingHere ? 'Conectando…' : 'Conectar'}
+          {connectingHere ? 'CONECTANDO…' : 'CONECTAR'}
         </button>
       )}
 
       {connectedHere && (
         <>
-          <ul className="w-full max-w-xs space-y-1">
-            {participants.map((p) => (
-              <li
-                key={p.userId}
-                className="flex items-center justify-between rounded bg-neutral-800 px-3 py-2 text-sm"
-              >
-                <span>{participantName(p.userId)}</span>
-                <span className="flex items-center gap-1 text-neutral-500">
-                  {isParticipantLive(p.userId) && <span title="Ao vivo (Go Live)">🔴</span>}
-                  {p.screen_sharing && <span title="Compartilhando tela">🖥️</span>}
-                  {(p.userId === currentUserId ? videoEnabled : p.video) && <span title="Câmera ligada">🎥</span>}
-                  {(p.userId === currentUserId ? localDeafened : p.deafened) && <span title="Ensurdecido">🙉</span>}
-                  {(p.userId === currentUserId ? localMuted : p.muted) ? '🔇' : '🎙️'}
-                </span>
-              </li>
-            ))}
+          <ul className="flex w-full max-w-sm flex-col gap-1.5">
+            {participants.map((p) => {
+              const isMe = p.userId === currentUserId
+              const muted = isMe ? localMuted : p.muted
+              const deafened = isMe ? localDeafened : p.deafened
+              const video = isMe ? videoEnabled : p.video
+              const live = isParticipantLive(p.userId)
+              const hot = !muted
+
+              return (
+                <li
+                  key={p.userId}
+                  className={`bevel-sm flex items-center justify-between border px-3.5 py-2.5 text-sm transition ${
+                    hot ? 'border-volt/60 bg-panel glow-volt' : 'border-line bg-panel text-mist-dim'
+                  }`}
+                >
+                  <span className="flex items-center gap-2 font-medium text-mist">
+                    <span
+                      className={`h-1.5 w-1.5 rounded-full ${
+                        hot ? 'animate-pulse-live bg-volt' : 'bg-mist-faint'
+                      }`}
+                    />
+                    {participantName(p.userId)}
+                  </span>
+                  <span className="flex items-center gap-1.5 text-mist-dim">
+                    {live && (
+                      <span
+                        title="Ao vivo (Go Live)"
+                        className="font-mono text-[10px] font-bold tracking-wide text-plasma"
+                      >
+                        ● LIVE
+                      </span>
+                    )}
+                    {p.screen_sharing && <span title="Compartilhando tela">🖥️</span>}
+                    {video && <span title="Câmera ligada">🎥</span>}
+                    {deafened && <span title="Ensurdecido">🙉</span>}
+                    <span className={muted ? 'text-plasma' : 'text-volt'}>{muted ? '🔇' : '🎙️'}</span>
+                  </span>
+                </li>
+              )
+            })}
           </ul>
 
           <div className="flex flex-wrap justify-center gap-2">
-            <button
-              onClick={toggleMute}
-              className="rounded bg-neutral-800 px-4 py-2 text-sm transition hover:bg-neutral-700"
-            >
-              {localMuted ? 'Ativar microfone' : 'Mutar'}
-            </button>
-            <button
+            <VoiceButton onClick={toggleMute} active={localMuted} activeLabel="ATIVAR MIC" label="MUTAR" />
+            <VoiceButton
               onClick={toggleDeafen}
-              className={`rounded px-4 py-2 text-sm transition ${
-                localDeafened ? 'bg-red-900 hover:bg-red-800' : 'bg-neutral-800 hover:bg-neutral-700'
-              }`}
-            >
-              {localDeafened ? 'Parar de ensurdecer' : 'Ensurdecer'}
-            </button>
-            <button
+              active={localDeafened}
+              activeLabel="REATIVAR ÁUDIO"
+              label="ENSURDECER"
+            />
+            <VoiceButton
               onClick={() => toggleVideo()}
+              active={videoEnabled}
+              activeLabel="DESLIGAR CÂMERA"
+              label="LIGAR CÂMERA"
               disabled={videoCapReached}
               title={videoCapReached ? 'Limite de 4 participantes com vídeo atingido nessa sala' : undefined}
-              className={`rounded px-4 py-2 text-sm transition disabled:opacity-40 ${
-                videoEnabled ? 'bg-red-900 hover:bg-red-800' : 'bg-neutral-800 hover:bg-neutral-700'
-              }`}
-            >
-              {videoEnabled ? 'Desligar câmera' : 'Ligar câmera'}
-            </button>
-            <button
+            />
+            <VoiceButton
               onClick={() => (screenSharing ? stopScreenShare() : setPickerTarget('screen'))}
-              className={`rounded px-4 py-2 text-sm transition ${
-                screenSharing ? 'bg-red-900 hover:bg-red-800' : 'bg-neutral-800 hover:bg-neutral-700'
-              }`}
-            >
-              {screenSharing ? 'Parar compartilhamento' : 'Compartilhar tela'}
-            </button>
-            <button
+              active={screenSharing}
+              activeLabel="PARAR TELA"
+              label="COMPARTILHAR TELA"
+            />
+            <VoiceButton
               onClick={() => (isLive ? stopGoLive() : setPickerTarget('golive'))}
+              active={isLive}
+              activeLabel="PARAR TRANSMISSÃO"
+              label="IR AO VIVO"
               disabled={goLiveStatus !== 'connected' && !isLive}
               title={goLiveStatus !== 'connected' ? 'Conectando ao Go Live…' : undefined}
-              className={`rounded px-4 py-2 text-sm transition disabled:opacity-40 ${
-                isLive ? 'bg-red-900 hover:bg-red-800' : 'bg-neutral-800 hover:bg-neutral-700'
-              }`}
+            />
+            <button
+              onClick={handleLeave}
+              className="bevel-sm border border-plasma/60 bg-plasma/10 px-4 py-2 font-display text-xs font-bold tracking-wide text-plasma transition hover:bg-plasma/20"
             >
-              {isLive ? 'Parar transmissão' : 'Ir ao vivo'}
-            </button>
-            <button onClick={handleLeave} className="rounded bg-red-900 px-4 py-2 text-sm transition hover:bg-red-800">
-              Sair
+              SAIR
             </button>
           </div>
 
@@ -189,9 +213,14 @@ export function VoicePanel({
             />
           ))}
 
-          {localLiveStream && <RemoteVideo stream={localLiveStream} label="🔴 Você está ao vivo" muted />}
+          {localLiveStream && <RemoteVideo stream={localLiveStream} label="● Você está ao vivo" muted live />}
           {Object.entries(remoteLiveStreams).map(([peerId, stream]) => (
-            <RemoteVideo key={peerId} stream={stream} label={`🔴 ${participantName(peerId)} está ao vivo`} />
+            <RemoteVideo
+              key={peerId}
+              stream={stream}
+              label={`● ${participantName(peerId)} está ao vivo`}
+              live
+            />
           ))}
 
           {Object.entries(remoteAudioStreams).map(([peerId, stream]) => (
@@ -215,6 +244,37 @@ export function VoicePanel({
   )
 }
 
+function VoiceButton({
+  onClick,
+  active,
+  activeLabel,
+  label,
+  disabled,
+  title
+}: {
+  onClick: () => void
+  active: boolean
+  activeLabel: string
+  label: string
+  disabled?: boolean
+  title?: string
+}) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      title={title}
+      className={`bevel-sm border px-4 py-2 font-display text-xs font-bold tracking-wide transition disabled:opacity-40 ${
+        active
+          ? 'border-plasma/60 bg-plasma/10 text-plasma hover:bg-plasma/20'
+          : 'border-line bg-panel text-mist-dim hover:border-mist-dim hover:text-mist'
+      }`}
+    >
+      {active ? activeLabel : label}
+    </button>
+  )
+}
+
 function RemoteAudio({ stream, muted }: { stream: MediaStream; muted?: boolean }) {
   const ref = useRef<HTMLAudioElement>(null)
 
@@ -225,7 +285,17 @@ function RemoteAudio({ stream, muted }: { stream: MediaStream; muted?: boolean }
   return <audio ref={ref} autoPlay muted={muted} />
 }
 
-function RemoteVideo({ stream, label, muted }: { stream: MediaStream; label: string; muted?: boolean }) {
+function RemoteVideo({
+  stream,
+  label,
+  muted,
+  live
+}: {
+  stream: MediaStream
+  label: string
+  muted?: boolean
+  live?: boolean
+}) {
   const ref = useRef<HTMLVideoElement>(null)
 
   useEffect(() => {
@@ -234,8 +304,15 @@ function RemoteVideo({ stream, label, muted }: { stream: MediaStream; label: str
 
   return (
     <div className="w-full max-w-2xl">
-      <p className="mb-1 text-xs text-neutral-500">{label}</p>
-      <video ref={ref} autoPlay muted={muted} className="w-full rounded border border-neutral-700 bg-black" />
+      <p className={`mb-1 font-mono text-[11px] tracking-wide ${live ? 'text-plasma' : 'text-mist-dim'}`}>
+        {label}
+      </p>
+      <video
+        ref={ref}
+        autoPlay
+        muted={muted}
+        className={`bevel w-full border bg-black ${live ? 'border-plasma/60' : 'border-line'}`}
+      />
     </div>
   )
 }
