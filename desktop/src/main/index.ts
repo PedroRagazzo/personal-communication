@@ -104,11 +104,41 @@ function registerScreenShareHandlers(): void {
   })
 }
 
+// Sem moldura nativa nenhuma ("borda infinita", a pedido do usuário) — o
+// título e os botões de minimizar/maximizar/fechar são desenhados pelo
+// próprio renderer (components/TitleBar.tsx), no mesmo sistema visual do
+// resto do app, e agem via os handlers de IPC abaixo (janela não tem como
+// se minimizar/fechar sozinha a partir do renderer, isso é sempre uma
+// operação do processo main). Redimensionar pelas bordas continua
+// funcionando sozinho no Windows mesmo sem frame — não precisa de código
+// extra pra isso.
+function registerWindowControlHandlers(): void {
+  ipcMain.on('window:minimize', (event) => {
+    BrowserWindow.fromWebContents(event.sender)?.minimize()
+  })
+
+  ipcMain.on('window:toggle-maximize', (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    if (!win) return
+    if (win.isMaximized()) win.unmaximize()
+    else win.maximize()
+  })
+
+  ipcMain.on('window:close', (event) => {
+    BrowserWindow.fromWebContents(event.sender)?.close()
+  })
+
+  ipcMain.handle('window:is-maximized', (event) => {
+    return BrowserWindow.fromWebContents(event.sender)?.isMaximized() ?? false
+  })
+}
+
 function createWindow(): void {
   const win = new BrowserWindow({
     width: 1280,
     height: 800,
     show: false,
+    frame: false,
     webPreferences: {
       // CommonJS (.cjs), não ESM — sandbox: true não suporta preload em
       // ESM (Electron recusa carregar com "Cannot use import statement
@@ -123,6 +153,13 @@ function createWindow(): void {
   })
 
   win.once('ready-to-show', () => win.show())
+
+  // O botão de maximizar/restaurar do TitleBar precisa saber o estado atual
+  // mesmo quando ele muda por outro caminho (duplo clique na área de
+  // arrastar, Aero Snap do Windows, atalho de teclado) — não só pelo
+  // próprio clique nele.
+  win.on('maximize', () => win.webContents.send('window:maximize-changed', true))
+  win.on('unmaximize', () => win.webContents.send('window:maximize-changed', false))
 
   if (process.env['ELECTRON_RENDERER_URL']) {
     win.loadURL(process.env['ELECTRON_RENDERER_URL'])
@@ -142,6 +179,7 @@ app.whenReady().then(() => {
   registerSecureStorageHandlers()
   registerPermissionHandlers()
   registerScreenShareHandlers()
+  registerWindowControlHandlers()
   createWindow()
 
   app.on('activate', () => {

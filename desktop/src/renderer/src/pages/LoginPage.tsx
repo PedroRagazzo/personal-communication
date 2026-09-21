@@ -30,7 +30,7 @@ export function LoginPage({ onSwitchToRegister }: { onSwitchToRegister: () => vo
   }
 
   return (
-    <div className="rig-grid flex h-screen items-center justify-center bg-void">
+    <div className="rig-grid flex h-full items-center justify-center bg-void">
       <div className="w-[380px]">
         <div className="mb-6 flex items-center gap-3">
           <div className="bevel-sm flex h-11 w-11 shrink-0 items-center justify-center bg-volt text-void">

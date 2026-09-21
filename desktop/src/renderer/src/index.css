@@ -104,6 +104,16 @@
     0 0 24px -6px color-mix(in srgb, var(--color-plasma) 80%, transparent);
 }
 
+/* Janela sem moldura nativa (ver main/index.ts, frame: false) — a área de
+   arrastar do TitleBar precisa dizer isso pro Chromium via CSS; os botões
+   dentro dela precisam da exceção oposta, senão o clique vira arrastar. */
+@utility app-drag {
+  -webkit-app-region: drag;
+}
+@utility app-no-drag {
+  -webkit-app-region: no-drag;
+}
+
 @keyframes pulse-live {
   0%,
   100% {

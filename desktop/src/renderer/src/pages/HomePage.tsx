@@ -36,7 +36,7 @@ export function HomePage() {
   const selectedChannel = channels.find((c) => c.id === selectedChannelId) ?? null
 
   return (
-    <div className="flex h-screen bg-void text-mist">
+    <div className="flex h-full bg-void text-mist">
       <ServerSidebar
         servers={servers}
         selectedServerId={selectedServerId}
