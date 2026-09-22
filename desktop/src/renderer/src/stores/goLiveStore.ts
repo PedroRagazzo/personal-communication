@@ -152,37 +152,22 @@ export const useGoLiveStore = create<GoLiveState>((set, get) => ({
       }
     )
 
-    // `join` do GoLiveChannel devolve {token, url} na própria resposta do
-    // join (3-tuple {:ok, payload, socket} no backend), não via evento
-    // separado — diferente de voice:{id}, que só confirma :ok.
-    let token: string
-    let url: string
-    try {
-      const resp = await new Promise<{ token: string; url: string }>((resolve, reject) => {
-        channel
-          .join()
-          .receive('ok', (r: { token: string; url: string }) => resolve(r))
-          .receive('error', (r) => reject(r))
-      })
-      token = resp.token
-      url = resp.url
-    } catch {
-      set({ status: 'idle', channelId: null, error: 'não foi possível entrar no canal de Go Live' })
-      return
-    }
-
-    try {
-      await liveRoom.connect(url, token, { autoSubscribe: false })
-    } catch (err) {
-      channel.leave()
-      set({
-        status: 'idle',
-        channelId: null,
-        error: err instanceof Error ? `Go Live: ${err.message}` : 'não foi possível conectar ao LiveKit'
-      })
-      return
-    }
-
+    // Presence precisa estar registrada ANTES do channel.join() (mesmo
+    // padrão de voiceStore.ts) — bug real reportado, achado só agora que o
+    // Go Live foi testado de verdade com 2 pessoas (nunca dava pra verificar
+    // isso neste ambiente sem Docker/LiveKit real, ver CLAUDE.md). O backend
+    // manda o "presence_state" logo depois do reply de join
+    // (go_live_channel.ex, handle_info(:after_join, ...)) — se a `Presence`
+    // só é criada DEPOIS do `await liveRoom.connect(...)` (uma operação de
+    // rede de verdade contra o LiveKit, não instantânea), esse push chega e
+    // é descartado em silêncio (nenhum listener ainda vinculado pra
+    // "presence_state"). Resultado: quem já estava ao vivo ANTES dessa
+    // pessoa entrar no canal nunca aparece como "ao vivo" pra ela — nem o
+    // botão do roster nem o card do GoLiveStreams, já que os dois dependem
+    // do mesmo `participants`/`live` — até essa outra pessoa parar e
+    // começar a transmitir de novo (o que gera um presence_diff incremental,
+    // esse sim capturado). Corrigido registrando a Presence antes até do
+    // `channel.join()`, não só antes do `liveRoom.connect()`.
     const presence = new Presence(channel)
     presence.onSync(() => {
       const list = presence.list<GoLiveParticipant>((userId, pres) => ({
@@ -218,6 +203,37 @@ export const useGoLiveStore = create<GoLiveState>((set, get) => ({
         return { participants: list, watchingUserIds }
       })
     })
+
+    // `join` do GoLiveChannel devolve {token, url} na própria resposta do
+    // join (3-tuple {:ok, payload, socket} no backend), não via evento
+    // separado — diferente de voice:{id}, que só confirma :ok.
+    let token: string
+    let url: string
+    try {
+      const resp = await new Promise<{ token: string; url: string }>((resolve, reject) => {
+        channel
+          .join()
+          .receive('ok', (r: { token: string; url: string }) => resolve(r))
+          .receive('error', (r) => reject(r))
+      })
+      token = resp.token
+      url = resp.url
+    } catch {
+      set({ status: 'idle', channelId: null, error: 'não foi possível entrar no canal de Go Live' })
+      return
+    }
+
+    try {
+      await liveRoom.connect(url, token, { autoSubscribe: false })
+    } catch (err) {
+      channel.leave()
+      set({
+        status: 'idle',
+        channelId: null,
+        error: err instanceof Error ? `Go Live: ${err.message}` : 'não foi possível conectar ao LiveKit'
+      })
+      return
+    }
 
     phoenixChannel = channel
     room = liveRoom

@@ -337,6 +337,47 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
       for (const participant of list) {
         if (participant.userId !== currentUserId) meshManager.addPeer(participant.userId)
       }
+
+      // Bug real reportado (v1.7.1): quem já estava na call via câmera/tela
+      // de outra pessoa que depois desligou ficava com um tile pequeno
+      // travado (último frame congelado) pro resto da chamada — nunca
+      // sumia. Causa: câmera/tela usam replaceTrack(null) pra desligar, de
+      // propósito, pra nunca renegociar (ver o comentário no topo de
+      // MeshManager.ts) — mas replaceTrack(null) só deixa a track do
+      // RECEPTOR "muted", nunca "ended", e só 'ended' dispara
+      // onRemoteTrackEnded (que é quem limpa remoteCameraStreams/
+      // remoteScreenStreams). Corrigido aqui, não lá: Presence já é a
+      // fonte de verdade de "esse peer está com câmera/tela ligada?" (é o
+      // que já desambigua qual track é qual, logo abaixo) — reaproveitada
+      // pra também limpar o que o evento de track nunca limpou sozinho.
+      // Exige AS DUAS coisas (Presence dizendo que desligou E a track já
+      // `muted` de verdade) antes de apagar, não só uma — só Presence
+      // arriscaria apagar um compartilhamento novo e válido ainda a
+      // caminho (a classificação em onRemoteTrack roda numa corrida
+      // parecida, ver o comentário lá) já que esse evento dispara UMA vez
+      // só; apagar cedo demais o perderia pra sempre, sem nada que
+      // reponha depois.
+      set((state) => {
+        let cameraStreams: typeof state.remoteCameraStreams | null = null
+        let screenStreams: typeof state.remoteScreenStreams | null = null
+        for (const participant of list) {
+          const camera = state.remoteCameraStreams[participant.userId]
+          if (!participant.video && camera && camera.getVideoTracks().every((t) => t.muted)) {
+            cameraStreams ??= { ...state.remoteCameraStreams }
+            delete cameraStreams[participant.userId]
+          }
+          const screen = state.remoteScreenStreams[participant.userId]
+          if (!participant.screen_sharing && screen && screen.getVideoTracks().every((t) => t.muted)) {
+            screenStreams ??= { ...state.remoteScreenStreams }
+            delete screenStreams[participant.userId]
+          }
+        }
+        if (!cameraStreams && !screenStreams) return {}
+        return {
+          ...(cameraStreams && { remoteCameraStreams: cameraStreams }),
+          ...(screenStreams && { remoteScreenStreams: screenStreams })
+        }
+      })
     })
     // De propósito, `presence.onLeave` NÃO derruba a peer connection.
     // `Presence.update` (usado por mute/deafen/video/screen_sharing, ver
