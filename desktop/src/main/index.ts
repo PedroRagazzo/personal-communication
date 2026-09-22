@@ -1,4 +1,16 @@
-import { app, BrowserWindow, desktopCapturer, ipcMain, Menu, nativeImage, safeStorage, session, Tray } from 'electron'
+import {
+  app,
+  BrowserWindow,
+  desktopCapturer,
+  globalShortcut,
+  ipcMain,
+  Menu,
+  nativeImage,
+  safeStorage,
+  session,
+  shell,
+  Tray
+} from 'electron'
 import { join } from 'node:path'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 
@@ -130,6 +142,136 @@ function registerScreenShareHandlers(): void {
       }
       callback(includeAudio ? { video: match, audio: 'loopback' } : { video: match })
     })
+  })
+}
+
+// Atalhos globais pra mutar/ensurdecer (v1.7.0, a pedido do usuário) —
+// `globalShortcut`, não um `keydown` no renderer, de propósito: precisam
+// funcionar mesmo com a janela minimizada/na bandeja ou sem foco (o cenário
+// mais comum de usar isso de verdade — jogando, com o app em segundo
+// plano). Registrados a partir do que a pessoa configurou em
+// Configurações (settingsStore.ts, localStorage) — o processo main não
+// tem acesso a isso diretamente, então o renderer manda o acelerador via
+// IPC assim que carrega a preferência (e de novo a cada mudança).
+const registeredAccelerators: Record<'mute' | 'deafen', string | null> = {
+  mute: null,
+  deafen: null
+}
+
+function registerShortcutHandlers(): void {
+  ipcMain.handle(
+    'shortcuts:set',
+    (_event, action: 'mute' | 'deafen', accelerator: string | null): { ok: boolean } => {
+      const current = registeredAccelerators[action]
+      if (current) globalShortcut.unregister(current)
+      registeredAccelerators[action] = null
+
+      if (!accelerator) return { ok: true }
+
+      const ok = globalShortcut.register(accelerator, () => {
+        mainWindow?.webContents.send('shortcuts:triggered', action)
+      })
+      if (ok) registeredAccelerators[action] = accelerator
+      return { ok }
+    }
+  )
+}
+
+// Sistema de update (v1.7.0, a pedido do usuário: "não precisar ficar
+// rebaixando toda hora") — checagem simples contra a API pública do
+// GitHub (releases/latest), não `electron-updater`: o app não teria como
+// autodownload/instalar silenciosamente sem assinatura de código (o
+// instalador já é sem assinatura, SmartScreen já avisa "editor
+// desconhecido" na instalação manual — automatizar isso silenciosamente
+// levantaria o mesmo aviso de um jeito mais confuso de explicar pra quem
+// tá só tentando continuar numa chamada). Em vez disso: verifica a
+// versão mais nova periodicamente, avisa a renderer via IPC, e um clique
+// no ícone baixa o instalador de verdade (URL pública do GitHub Release,
+// repositório é público) pra pasta de downloads do usuário e oferece
+// abrir — a pessoa só precisa confirmar a instalação do NSIS que já
+// conhece, não precisa mais ir procurar a versão nova manualmente.
+const GITHUB_REPO = 'PedroRagazzo/tora-dos-burro'
+const UPDATE_CHECK_INTERVAL_MS = 4 * 60 * 60 * 1000
+
+interface GitHubReleaseAsset {
+  name: string
+  browser_download_url: string
+}
+
+interface GitHubRelease {
+  tag_name: string
+  html_url: string
+  assets: GitHubReleaseAsset[]
+}
+
+function compareVersions(a: string, b: string): number {
+  const partsA = a.split('.').map(Number)
+  const partsB = b.split('.').map(Number)
+  for (let i = 0; i < Math.max(partsA.length, partsB.length); i++) {
+    const diff = (partsA[i] ?? 0) - (partsB[i] ?? 0)
+    if (diff !== 0) return diff
+  }
+  return 0
+}
+
+async function fetchLatestRelease(): Promise<GitHubRelease | null> {
+  try {
+    const res = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/releases/latest`)
+    if (!res.ok) return null
+    return (await res.json()) as GitHubRelease
+  } catch {
+    return null
+  }
+}
+
+async function checkForUpdate(): Promise<void> {
+  const release = await fetchLatestRelease()
+  if (!release || !mainWindow) return
+
+  const latestVersion = release.tag_name.replace(/^v/, '')
+  if (compareVersions(latestVersion, app.getVersion()) <= 0) return
+
+  const asset = release.assets.find((a) => a.name.endsWith('-setup.exe'))
+  if (!asset) return
+
+  mainWindow.webContents.send('updates:available', {
+    version: latestVersion,
+    releaseUrl: release.html_url,
+    downloadUrl: asset.browser_download_url,
+    fileName: asset.name
+  })
+}
+
+function registerUpdateHandlers(): void {
+  ipcMain.handle('updates:check', () => checkForUpdate())
+
+  // Baixa de verdade pra pasta de Downloads do usuário (não só abre o
+  // navegador) — direto, sem diálogo de "Salvar como" (setSavePath, não
+  // setSaveDialogOptions), já que o objetivo é reduzir o trabalho manual
+  // de sempre ter que ir buscar a versão nova. Progresso já aparece
+  // sozinho na barra de tarefas do Windows (comportamento padrão do
+  // Electron pra um DownloadItem).
+  ipcMain.handle('updates:download', async (_event, downloadUrl: string, fileName: string) => {
+    if (!mainWindow) return { ok: false }
+
+    return new Promise<{ ok: boolean; path?: string }>((resolve) => {
+      session.defaultSession.once('will-download', (_event, item) => {
+        const savePath = join(app.getPath('downloads'), fileName)
+        item.setSavePath(savePath)
+        item.once('done', (_e, state) => {
+          resolve(state === 'completed' ? { ok: true, path: savePath } : { ok: false })
+        })
+      })
+      mainWindow?.webContents.downloadURL(downloadUrl)
+    })
+  })
+
+  ipcMain.handle('updates:open-path', (_event, path: string) => {
+    return shell.openPath(path)
+  })
+
+  ipcMain.handle('updates:open-release-page', (_event, url: string) => {
+    shell.openExternal(url)
   })
 }
 
@@ -269,13 +411,30 @@ app.whenReady().then(() => {
   registerPermissionHandlers()
   registerScreenShareHandlers()
   registerWindowControlHandlers()
+  registerShortcutHandlers()
+  registerUpdateHandlers()
   createWindow()
   createTray()
+
+  // Primeira checagem logo depois de abrir (dá um tempo pra janela/
+  // renderer estarem prontos pra receber o IPC) e depois periodicamente —
+  // o app pode ficar dias aberto na bandeja (v1.2.0), então só checar no
+  // boot deixaria passar reto por qualquer versão lançada nesse meio tempo.
+  setTimeout(checkForUpdate, 5000)
+  setInterval(checkForUpdate, UPDATE_CHECK_INTERVAL_MS)
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
     else showMainWindow()
   })
+})
+
+// Atalhos globais (globalShortcut) continuam reservados no SO até serem
+// explicitamente liberados — sem isso, a tecla ficaria "presa" pra outros
+// programas mesmo depois do processo do Electron encerrar de vez, até o
+// SO eventualmente perceber que o dono sumiu.
+app.on('will-quit', () => {
+  globalShortcut.unregisterAll()
 })
 
 // Cobre qualquer caminho real de saída do processo (não só o "Sair" da

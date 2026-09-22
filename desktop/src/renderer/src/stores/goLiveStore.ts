@@ -11,6 +11,7 @@ import {
 import { getSocket } from '../services/socket'
 import { useVoiceStore } from './voiceStore'
 import { playLiveStartSound, playLiveStopSound } from '../services/soundCues'
+import { limitAudioTrack } from '../webrtc/audioLimiter'
 
 // Go Live (FASE 9 no backend, FASE 11 fatia 10 aqui): diferente de
 // voiceStore.ts, aqui não existe mesh nenhum — mídia vai direto
@@ -69,6 +70,21 @@ interface GoLiveState {
 
 let phoenixChannel: Channel | null = null
 let room: Room | null = null
+// Track publicada de verdade quando transmite com som do PC — nunca a
+// crua (ver limitAudioTrack em webrtc/audioLimiter.ts, v1.7.0: áudio
+// "estourando" reportado por um usuário). Guardada à parte de
+// `localStream` (que continua sendo a captura crua, usada só pro preview
+// local) porque o unpublish/stop precisa da REFERÊNCIA exata da track
+// que foi publicada, e essa não é a mesma que `stream.getAudioTracks()[0]`.
+let publishedAudioTrack: MediaStreamTrack | null = null
+let audioLimiterCleanup: (() => void) | null = null
+
+function cleanupAudioLimiter(): void {
+  audioLimiterCleanup?.()
+  audioLimiterCleanup = null
+  publishedAudioTrack?.stop()
+  publishedAudioTrack = null
+}
 
 export const useGoLiveStore = create<GoLiveState>((set, get) => ({
   status: 'idle',
@@ -211,6 +227,7 @@ export const useGoLiveStore = create<GoLiveState>((set, get) => ({
   leave: () => {
     const stream = get().localStream
     stream?.getTracks().forEach((track) => track.stop())
+    cleanupAudioLimiter()
     room?.disconnect()
     room = null
     phoenixChannel?.leave()
@@ -314,10 +331,16 @@ export const useGoLiveStore = create<GoLiveState>((set, get) => ({
       await room.disconnect()
       await room.connect(reply.url, reply.token, { autoSubscribe: false })
       await room.localParticipant.publishTrack(stream.getVideoTracks()[0])
-      const audioTrack = stream.getAudioTracks()[0]
-      if (audioTrack) await room.localParticipant.publishTrack(audioTrack)
+      const rawAudioTrack = stream.getAudioTracks()[0]
+      if (rawAudioTrack) {
+        const limited = limitAudioTrack(rawAudioTrack)
+        publishedAudioTrack = limited.track
+        audioLimiterCleanup = limited.cleanup
+        await room.localParticipant.publishTrack(limited.track)
+      }
     } catch (err) {
       stream.getTracks().forEach((track) => track.stop())
+      cleanupAudioLimiter()
       phoenixChannel?.push('golive:stop', {})
       set({ error: err instanceof Error ? `Go Live: ${err.message}` : 'falha ao transmitir' })
       return
@@ -345,11 +368,11 @@ export const useGoLiveStore = create<GoLiveState>((set, get) => ({
     const stream = get().localStream
     if (room) {
       const videoTrack = stream?.getVideoTracks()[0]
-      const audioTrack = stream?.getAudioTracks()[0]
       if (videoTrack) room.localParticipant.unpublishTrack(videoTrack)
-      if (audioTrack) room.localParticipant.unpublishTrack(audioTrack)
+      if (publishedAudioTrack) room.localParticipant.unpublishTrack(publishedAudioTrack)
     }
     stream?.getTracks().forEach((t) => t.stop())
+    cleanupAudioLimiter()
     phoenixChannel?.push('golive:stop', {})
     useVoiceStore.getState().removeSystemAudioSource('golive')
     set({ isLive: false, localStream: null })

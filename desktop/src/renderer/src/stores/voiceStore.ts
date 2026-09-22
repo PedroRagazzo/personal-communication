@@ -6,6 +6,7 @@ import { MeshManager } from '../webrtc/MeshManager'
 import { SpeakingDetector } from '../webrtc/SpeakingDetector'
 import { useSettingsStore } from './settingsStore'
 import { playJoinVoiceSound, playLeaveVoiceSound, playMuteSound, playUnmuteSound } from '../services/soundCues'
+import { limitAudioTrack } from '../webrtc/audioLimiter'
 
 export interface ScreenShareQuality {
   width: number
@@ -103,6 +104,29 @@ let lastScreenSourceId: string | null = null
 // localPlaybackMuted acima) — contador por origem, não um bool: só desmuta
 // a reprodução local quando o conjunto fica vazio.
 const activeSystemAudioSources = new Set<SystemAudioSource>()
+// Limiter aplicado ao áudio de sistema da tela compartilhada (v1.7.0, ver
+// webrtc/audioLimiter.ts) — guardado à parte porque a track crua fica FORA
+// do `stream` normal depois de aplicado (removida e trocada pela versão
+// limitada, pra continuar dentro do mesmo MediaStream e preservar o
+// agrupamento por msid com a track de vídeo — ver MeshManager.ts), então
+// só isso aqui ainda tem a referência pra parar ela de verdade depois.
+let screenAudioLimiter: { rawTrack: MediaStreamTrack; cleanup: () => void } | null = null
+
+function applyScreenAudioLimiter(stream: MediaStream): void {
+  const rawTrack = stream.getAudioTracks()[0]
+  if (!rawTrack) return
+  const { track: limitedTrack, cleanup } = limitAudioTrack(rawTrack)
+  stream.removeTrack(rawTrack)
+  stream.addTrack(limitedTrack)
+  screenAudioLimiter = { rawTrack, cleanup }
+}
+
+function stopScreenAudioLimiter(): void {
+  if (!screenAudioLimiter) return
+  screenAudioLimiter.rawTrack.stop()
+  screenAudioLimiter.cleanup()
+  screenAudioLimiter = null
+}
 
 export const useVoiceStore = create<VoiceState>((set, get) => ({
   status: 'idle',
@@ -371,6 +395,7 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
     phoenixChannel?.leave()
     phoenixChannel = null
     lastScreenSourceId = null
+    stopScreenAudioLimiter()
     activeSystemAudioSources.clear()
     set({
       status: 'idle',
@@ -497,6 +522,7 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
       return
     }
 
+    if (audioIncluded) applyScreenAudioLimiter(stream)
     mesh.setScreenTrack(stream)
     mesh.setScreenAudioTrack(audioIncluded ? stream : null)
     const track = stream.getVideoTracks()[0]
@@ -536,6 +562,7 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
     // "funcionava" do lado do sender — track id novo, sem erro — mas o
     // vídeo de verdade nunca mudava de qualidade pro peer remoto).
     current.getTracks().forEach((track) => track.stop())
+    stopScreenAudioLimiter()
 
     await window.api.screenShare.selectSource(lastScreenSourceId, includeAudio)
 
@@ -588,6 +615,7 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
     }
 
     const audioIncluded = includeAudio && !audioCaptureFailed
+    if (audioIncluded) applyScreenAudioLimiter(stream)
     mesh.setScreenTrack(stream)
     mesh.setScreenAudioTrack(audioIncluded ? stream : null)
     if (includeAudio && !audioIncluded) get().removeSystemAudioSource('screenshare')
@@ -609,6 +637,7 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
   stopScreenShare: () => {
     mesh?.setScreenTrack(null)
     mesh?.setScreenAudioTrack(null)
+    stopScreenAudioLimiter()
     if (get().screenShareIncludesAudio) get().removeSystemAudioSource('screenshare')
     phoenixChannel?.push('screen_share:stop', {})
     lastScreenSourceId = null

@@ -216,13 +216,37 @@ export function VoicePanel({
                     {participantName(p.userId)}
                   </span>
                   <span className="flex items-center gap-1.5 text-mist-dim">
-                    {live && (
+                    {live && isMe && (
                       <span
-                        title="Ao vivo (Go Live)"
+                        title="Você está ao vivo"
                         className="font-mono text-[10px] font-bold tracking-wide text-plasma"
                       >
                         ● LIVE
                       </span>
+                    )}
+                    {live && !isMe && (
+                      // v1.7.0, a pedido do usuário: botão direto pra entrar/sair
+                      // da transmissão dessa pessoa aqui no roster, sem precisar
+                      // rolar até o card do GoLiveStreams mais abaixo — chama as
+                      // mesmas ações (watchStream/stopWatchingStream), só um
+                      // segundo ponto de entrada pra ela.
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          if (watchingUserIds.has(p.userId)) stopWatchingStream(p.userId)
+                          else watchStream(p.userId)
+                        }}
+                        title={
+                          watchingUserIds.has(p.userId) ? 'Sair da transmissão' : 'Entrar na transmissão'
+                        }
+                        className={`font-mono text-[10px] font-bold tracking-wide transition ${
+                          watchingUserIds.has(p.userId)
+                            ? 'text-mist-dim hover:text-plasma'
+                            : 'text-plasma hover:text-plasma-soft'
+                        }`}
+                      >
+                        {watchingUserIds.has(p.userId) ? '● ASSISTINDO' : '● ENTRAR'}
+                      </button>
                     )}
                     {p.screen_sharing && <span title="Compartilhando tela">🖥️</span>}
                     {video && <span title="Câmera ligada">🎥</span>}

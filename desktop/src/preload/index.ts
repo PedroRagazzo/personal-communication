@@ -33,7 +33,46 @@ const api = {
       ipcRenderer.on('window:maximize-changed', listener)
       return () => ipcRenderer.removeListener('window:maximize-changed', listener)
     }
+  },
+  // Atalhos globais de mutar/ensurdecer (v1.7.0) — só `globalShortcut` vive
+  // no main; o renderer manda o acelerador (formato Electron, ex.
+  // "Control+Shift+M") calculado a partir da tecla capturada em
+  // SettingsModal.tsx, e escuta quando um deles dispara de verdade.
+  shortcuts: {
+    set: (action: 'mute' | 'deafen', accelerator: string | null): Promise<{ ok: boolean }> =>
+      ipcRenderer.invoke('shortcuts:set', action, accelerator),
+    onTriggered: (callback: (action: 'mute' | 'deafen') => void): (() => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, action: 'mute' | 'deafen'): void =>
+        callback(action)
+      ipcRenderer.on('shortcuts:triggered', listener)
+      return () => ipcRenderer.removeListener('shortcuts:triggered', listener)
+    }
+  },
+  // Sistema de update (v1.7.0) — checagem/download vivem no main (acesso
+  // de rede/disco); o renderer só escuta "tem versão nova" e pede pra
+  // baixar/abrir quando a pessoa clicar no ícone.
+  updates: {
+    check: (): Promise<void> => ipcRenderer.invoke('updates:check'),
+    download: (
+      downloadUrl: string,
+      fileName: string
+    ): Promise<{ ok: boolean; path?: string }> =>
+      ipcRenderer.invoke('updates:download', downloadUrl, fileName),
+    openPath: (path: string): Promise<string> => ipcRenderer.invoke('updates:open-path', path),
+    openReleasePage: (url: string): Promise<void> => ipcRenderer.invoke('updates:open-release-page', url),
+    onAvailable: (callback: (info: UpdateInfo) => void): (() => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, info: UpdateInfo): void => callback(info)
+      ipcRenderer.on('updates:available', listener)
+      return () => ipcRenderer.removeListener('updates:available', listener)
+    }
   }
+}
+
+export interface UpdateInfo {
+  version: string
+  releaseUrl: string
+  downloadUrl: string
+  fileName: string
 }
 
 contextBridge.exposeInMainWorld('api', api)

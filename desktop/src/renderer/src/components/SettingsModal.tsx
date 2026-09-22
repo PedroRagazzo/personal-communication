@@ -12,10 +12,13 @@ const METER_MAX = 100
 export function SettingsModal({ onClose }: { onClose: () => void }) {
   const mic = useSettingsStore((s) => s.mic)
   const soundCuesEnabled = useSettingsStore((s) => s.soundCuesEnabled)
+  const shortcuts = useSettingsStore((s) => s.shortcuts)
   const setEchoCancellation = useSettingsStore((s) => s.setEchoCancellation)
   const setNoiseSuppression = useSettingsStore((s) => s.setNoiseSuppression)
   const setMicSensitivity = useSettingsStore((s) => s.setMicSensitivity)
   const setSoundCuesEnabled = useSettingsStore((s) => s.setSoundCuesEnabled)
+  const setShortcut = useSettingsStore((s) => s.setShortcut)
+  const [shortcutError, setShortcutError] = useState<string | null>(null)
   const applyMicSensitivity = useVoiceStore((s) => s.setMicSensitivity)
   const activeCallStream = useVoiceStore((s) => s.localAudioStream)
 
@@ -80,6 +83,14 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
     applyMicSensitivity(value)
   }
 
+  async function handleShortcutChange(action: 'mute' | 'deafen', accelerator: string): Promise<void> {
+    setShortcutError(null)
+    const ok = await setShortcut(action, accelerator)
+    if (!ok) {
+      setShortcutError(`"${accelerator}" já está em uso por outro programa — tente outra combinação.`)
+    }
+  }
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-void/80" onClick={onClose}>
       <div
@@ -100,6 +111,29 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
             Um bip curto ao entrar/sair de uma call, mutar/desmutar, e quando alguém começa ou para uma
             transmissão.
           </p>
+        </section>
+
+        <section className="mb-5 space-y-3 border-b border-line-soft pb-5">
+          <h4 className="font-mono text-[10px] tracking-[0.2em] text-mist-dim">ATALHOS</h4>
+          <p className="text-xs leading-relaxed text-mist-dim">
+            Funcionam em qualquer lugar, mesmo com o app minimizado ou sem foco — precisam de pelo menos
+            uma tecla modificadora (Ctrl/Alt/Shift) pra não travar uma tecla normal em outros programas.
+          </p>
+          {shortcutError && (
+            <p className="border-l-2 border-plasma bg-plasma/10 px-3 py-2 text-xs text-plasma">
+              {shortcutError}
+            </p>
+          )}
+          <ShortcutRecorder
+            label="Mutar microfone"
+            value={shortcuts.mute}
+            onChange={(accelerator) => handleShortcutChange('mute', accelerator)}
+          />
+          <ShortcutRecorder
+            label="Ensurdecer (áudio completo)"
+            value={shortcuts.deafen}
+            onChange={(accelerator) => handleShortcutChange('deafen', accelerator)}
+          />
         </section>
 
         <section className="space-y-4">
@@ -156,6 +190,98 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
       </div>
     </div>
   )
+}
+
+// Captura a próxima tecla pressionada e vira um botão de "Alterar" —
+// converte pro formato de Accelerator do Electron (ex. "Control+Shift+M",
+// ver main/index.ts, globalShortcut.register). `capture: true` no listener
+// pra pegar o evento antes de qualquer outro handler de teclado da página.
+function ShortcutRecorder({
+  label,
+  value,
+  onChange
+}: {
+  label: string
+  value: string | null
+  onChange: (accelerator: string) => void
+}) {
+  const [recording, setRecording] = useState(false)
+
+  useEffect(() => {
+    if (!recording) return
+
+    function handleKeyDown(e: KeyboardEvent): void {
+      e.preventDefault()
+      e.stopPropagation()
+      if (e.key === 'Escape') {
+        setRecording(false)
+        return
+      }
+      const accelerator = eventToAccelerator(e)
+      if (!accelerator) return // só modificador solto ainda — espera a tecla de verdade
+      onChange(accelerator)
+      setRecording(false)
+    }
+
+    window.addEventListener('keydown', handleKeyDown, true)
+    return () => window.removeEventListener('keydown', handleKeyDown, true)
+  }, [recording, onChange])
+
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <span className="text-sm text-mist">{label}</span>
+      <button
+        onClick={() => setRecording(true)}
+        className={`bevel-sm min-w-[140px] border px-3 py-1.5 text-center font-mono text-xs tracking-wide transition ${
+          recording
+            ? 'border-volt bg-volt/10 text-volt'
+            : 'border-line text-mist-dim hover:border-mist-dim hover:text-mist'
+        }`}
+      >
+        {recording ? 'Pressione a tecla… (Esc cancela)' : (value ?? 'Nenhum')}
+      </button>
+    </div>
+  )
+}
+
+const SHORTCUT_KEY_NAMES: Record<string, string> = {
+  ' ': 'Space',
+  ArrowUp: 'Up',
+  ArrowDown: 'Down',
+  ArrowLeft: 'Left',
+  ArrowRight: 'Right',
+  Delete: 'Delete',
+  Backspace: 'Backspace',
+  Tab: 'Tab',
+  Enter: 'Return'
+}
+
+function mainKeyName(e: KeyboardEvent): string | null {
+  if (e.key === 'Control' || e.key === 'Alt' || e.key === 'Shift' || e.key === 'Meta') return null
+  if (SHORTCUT_KEY_NAMES[e.key]) return SHORTCUT_KEY_NAMES[e.key]
+  if (/^F([1-9]|1[0-9]|2[0-4])$/.test(e.key)) return e.key
+  if (e.key.length === 1) return e.key.toUpperCase()
+  return null
+}
+
+// Exige pelo menos um modificador de propósito — um atalho GLOBAL
+// (globalShortcut do Electron) sem modificador sequestraria essa tecla do
+// sistema inteiro enquanto o app estiver aberto, tornando-a inutilizável
+// em qualquer outro programa (ex.: nunca mais conseguir digitar a letra
+// escolhida). Retorna `null` até isso valer (tecla real + 1+ modificador).
+function eventToAccelerator(e: KeyboardEvent): string | null {
+  const parts: string[] = []
+  if (e.ctrlKey) parts.push('Control')
+  if (e.altKey) parts.push('Alt')
+  if (e.shiftKey) parts.push('Shift')
+  if (e.metaKey) parts.push('Super')
+  if (parts.length === 0) return null
+
+  const key = mainKeyName(e)
+  if (!key) return null
+
+  parts.push(key)
+  return parts.join('+')
 }
 
 // Nível de entrada em tempo real (mesma técnica RMS de

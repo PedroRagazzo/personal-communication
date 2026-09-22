@@ -37,6 +37,8 @@ export function HomePage() {
   const voiceParticipants = useVoiceStore((s) => s.participants)
   const speakingUserIds = useVoiceStore((s) => s.speakingUserIds)
   const joinVoice = useVoiceStore((s) => s.join)
+  const toggleMute = useVoiceStore((s) => s.toggleMute)
+  const toggleDeafen = useVoiceStore((s) => s.toggleDeafen)
   const joinGoLive = useGoLiveStore((s) => s.join)
 
   const loadSettingsForUser = useSettingsStore((s) => s.loadForUser)
@@ -57,10 +59,24 @@ export function HomePage() {
 
   // Configuração de microfone é por conta logada nesse aparelho (ver
   // settingsStore.ts) — carrega assim que sabe quem é, antes de qualquer
-  // chance da pessoa entrar num canal de voz.
+  // chance da pessoa entrar num canal de voz. `loadForUser` já registra
+  // os atalhos salvos no processo main (window.api.shortcuts.set).
   useEffect(() => {
     if (user) loadSettingsForUser(user.id)
   }, [user, loadSettingsForUser])
+
+  // Atalhos globais de mutar/ensurdecer (v1.7.0, settingsStore.ts registra
+  // o acelerador no main; aqui só escuta quando um deles dispara de
+  // verdade). Lê o status mais atual via getState() em vez do `voiceStatus`
+  // do hook — o listener é registrado uma vez só, então uma referência
+  // presa no closure ficaria desatualizada depois da primeira renderização.
+  useEffect(() => {
+    return window.api.shortcuts.onTriggered((action) => {
+      if (useVoiceStore.getState().status !== 'connected') return
+      if (action === 'mute') toggleMute()
+      else toggleDeafen()
+    })
+  }, [toggleMute, toggleDeafen])
 
   if (!user || !accessToken) return null
 
