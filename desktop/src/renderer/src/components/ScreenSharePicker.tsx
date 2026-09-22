@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { ScreenSource } from '../../../preload'
 import type { ScreenShareQuality } from '../stores/voiceStore'
+import { Toggle } from './Toggle'
 
 export const RESOLUTIONS: { label: string; width: number; height: number }[] = [
   { label: '720p', width: 1280, height: 720 },
@@ -17,15 +18,20 @@ const DEFAULT_QUALITY: ScreenShareQuality = { width: 1920, height: 1080, frameRa
 export function ScreenSharePicker({
   onSelect,
   onCancel,
-  showQuality = false
+  showQuality = false,
+  showAudioOption = false
 }: {
-  onSelect: (sourceId: string, quality: ScreenShareQuality) => void
+  onSelect: (sourceId: string, quality: ScreenShareQuality, includeAudio: boolean) => void
   onCancel: () => void
   showQuality?: boolean
+  // Só faz sentido pro Go Live — o compartilhamento de tela normal (mesh)
+  // não pediu som, então não ganha essa opção (ver VoicePanel.tsx).
+  showAudioOption?: boolean
 }) {
   const [sources, setSources] = useState<ScreenSource[]>([])
   const [loading, setLoading] = useState(true)
   const [quality, setQuality] = useState<ScreenShareQuality>(DEFAULT_QUALITY)
+  const [includeAudio, setIncludeAudio] = useState(false)
 
   useEffect(() => {
     window.api.screenShare.listSources().then((list) => {
@@ -84,6 +90,18 @@ export function ScreenSharePicker({
           </div>
         )}
 
+        {showAudioOption && (
+          <div className="mb-4 border border-line-soft bg-panel-2 px-3 py-2">
+            <Toggle label="Incluir som do PC" checked={includeAudio} onChange={setIncludeAudio} />
+            <p className="mt-1 text-[11px] leading-relaxed text-mist-dim">
+              Transmite o áudio que está tocando no seu computador (jogo, música, vídeo). Sua voz e a
+              dos outros na chamada não entram nessa captura — pra não duplicar o áudio de quem também
+              estiver assistindo e na chamada ao mesmo tempo, seu próprio áudio de voz fica mudo
+              localmente enquanto você transmite com som.
+            </p>
+          </div>
+        )}
+
         {loading && <p className="text-sm text-mist-dim">Carregando…</p>}
         {!loading && sources.length === 0 && (
           <p className="text-sm text-mist-dim">Nenhuma tela ou janela encontrada.</p>
@@ -93,7 +111,7 @@ export function ScreenSharePicker({
           {sources.map((source) => (
             <button
               key={source.id}
-              onClick={() => onSelect(source.id, quality)}
+              onClick={() => onSelect(source.id, quality, includeAudio)}
               className="bevel-sm overflow-hidden border border-line text-left transition hover:border-volt"
             >
               <img

@@ -1,8 +1,15 @@
 import { create } from 'zustand'
 import { Presence } from 'phoenix'
 import type { Channel } from 'phoenix'
-import { Room, RoomEvent, type RemoteTrack, type RemoteParticipant } from 'livekit-client'
+import {
+  Room,
+  RoomEvent,
+  type RemoteTrack,
+  type RemoteTrackPublication,
+  type RemoteParticipant
+} from 'livekit-client'
 import { getSocket } from '../services/socket'
+import { useVoiceStore } from './voiceStore'
 
 // Go Live (FASE 9 no backend, FASE 11 fatia 10 aqui): diferente de
 // voiceStore.ts, aqui não existe mesh nenhum — mídia vai direto
@@ -12,13 +19,16 @@ import { getSocket } from '../services/socket'
 // oficial da LiveKit (`livekit/client-sdk-js`).
 //
 // Entrar no canal de voz já entra aqui também (ver VoicePanel.tsx) —
-// conecta ao LiveKit com um token *subscriber-only*, então qualquer
-// stream que já esteja ao vivo aparece na hora (autoSubscribe é padrão
-// do Room.connect). "Ir ao vivo" troca pra um token *publisher*: o
-// token de assistir não tem permissão de publicar, então vira
-// desconectar+reconectar com o token novo (não existe upgrade de
-// permissão numa conexão já aberta na API do LiveKit) — feito no mesmo
-// objeto `Room`, não precisa recriar.
+// conecta ao LiveKit com um token *subscriber-only*. `autoSubscribe:
+// false` (v1.3.0, a pedido do usuário) — assistir uma transmissão agora é
+// uma escolha explícita (watchStream/stopWatchingStream), não automático:
+// só entrar no canal não baixa vídeo/áudio de ninguém, só fica sabendo
+// (via TrackPublished) o que está disponível. "Ir ao vivo" troca pra um
+// token *publisher*: o token de assistir não tem permissão de publicar,
+// então vira desconectar+reconectar com o token novo (não existe upgrade
+// de permissão numa conexão já aberta na API do LiveKit) — feito no mesmo
+// objeto `Room`, não precisa recriar. `autoSubscribe: false` precisa ser
+// passado de novo nesse reconnect, senão volta pro padrão (true).
 interface PresenceMeta {
   user_id: string
   live: boolean
@@ -36,11 +46,17 @@ interface GoLiveState {
   isLive: boolean
   localStream: MediaStream | null
   remoteStreams: Record<string, MediaStream>
+  // Quem a pessoa escolheu assistir de verdade (setSubscribed(true) já
+  // aplicado) — diferente de `participants.filter(p => p.live)`, que é só
+  // quem ESTÁ transmitindo, watchable ou não.
+  watchingUserIds: Set<string>
   error: string | null
   join: (channelId: string) => Promise<void>
   leave: () => void
-  startGoLive: (sourceId: string) => Promise<void>
+  startGoLive: (sourceId: string, includeSystemAudio: boolean) => Promise<void>
   stopGoLive: () => void
+  watchStream: (peerId: string) => void
+  stopWatchingStream: (peerId: string) => void
 }
 
 let phoenixChannel: Channel | null = null
@@ -53,6 +69,7 @@ export const useGoLiveStore = create<GoLiveState>((set, get) => ({
   isLive: false,
   localStream: null,
   remoteStreams: {},
+  watchingUserIds: new Set(),
   error: null,
 
   join: async (channelId) => {
@@ -68,18 +85,47 @@ export const useGoLiveStore = create<GoLiveState>((set, get) => ({
     const channel = socket.channel(`live:${channelId}`, {})
     const liveRoom = new Room()
 
-    liveRoom.on(RoomEvent.TrackSubscribed, (track: RemoteTrack, _pub, participant: RemoteParticipant) => {
-      if (track.kind !== 'video') return
-      const stream = track.mediaStream ?? new MediaStream([track.mediaStreamTrack])
-      set((state) => ({ remoteStreams: { ...state.remoteStreams, [participant.identity]: stream } }))
-    })
-    liveRoom.on(RoomEvent.TrackUnsubscribed, (_track: RemoteTrack, _pub, participant: RemoteParticipant) => {
-      set((state) => {
-        const rest = { ...state.remoteStreams }
-        delete rest[participant.identity]
-        return { remoteStreams: rest }
-      })
-    })
+    // Uma track (vídeo OU áudio) por evento — junta as duas no mesmo
+    // MediaStream por participante (por identity), pra um único <video>
+    // tocar as duas juntas sem precisar de elemento de áudio separado.
+    liveRoom.on(
+      RoomEvent.TrackSubscribed,
+      (track: RemoteTrack, _pub: RemoteTrackPublication, participant: RemoteParticipant) => {
+        set((state) => {
+          const stream = state.remoteStreams[participant.identity] ?? new MediaStream()
+          if (!stream.getTracks().some((t) => t.id === track.mediaStreamTrack.id)) {
+            stream.addTrack(track.mediaStreamTrack)
+          }
+          return { remoteStreams: { ...state.remoteStreams, [participant.identity]: stream } }
+        })
+      }
+    )
+    liveRoom.on(
+      RoomEvent.TrackUnsubscribed,
+      (track: RemoteTrack, _pub: RemoteTrackPublication, participant: RemoteParticipant) => {
+        set((state) => {
+          const stream = state.remoteStreams[participant.identity]
+          if (!stream) return state
+          stream.removeTrack(track.mediaStreamTrack)
+          if (stream.getTracks().length > 0) {
+            return { remoteStreams: { ...state.remoteStreams, [participant.identity]: stream } }
+          }
+          const rest = { ...state.remoteStreams }
+          delete rest[participant.identity]
+          return { remoteStreams: rest }
+        })
+      }
+    )
+    // Reconexão (alguém que eu já assistia foi ao vivo de novo, ou o
+    // startGoLive abaixo reconectou o Room) reanuncia as tracks — se eu já
+    // tinha escolhido assistir essa pessoa, reinscreve sozinho, sem exigir
+    // clicar "Entrar" de novo.
+    liveRoom.on(
+      RoomEvent.TrackPublished,
+      (publication: RemoteTrackPublication, participant: RemoteParticipant) => {
+        if (get().watchingUserIds.has(participant.identity)) publication.setSubscribed(true)
+      }
+    )
 
     // `join` do GoLiveChannel devolve {token, url} na própria resposta do
     // join (3-tuple {:ok, payload, socket} no backend), não via evento
@@ -101,7 +147,7 @@ export const useGoLiveStore = create<GoLiveState>((set, get) => ({
     }
 
     try {
-      await liveRoom.connect(url, token)
+      await liveRoom.connect(url, token, { autoSubscribe: false })
     } catch (err) {
       channel.leave()
       set({
@@ -118,7 +164,18 @@ export const useGoLiveStore = create<GoLiveState>((set, get) => ({
         userId,
         ...(pres.metas[0] as PresenceMeta)
       }))
-      set({ participants: list })
+      set((state) => {
+        // Quem parou de transmitir sai de "assistindo" também — senão, se
+        // essa pessoa for ao vivo de novo mais tarde, o watchStream
+        // original nunca disparou o reinscreve-sozinho do TrackPublished
+        // acima (o estado diz "assistindo" mas nunca foi resubscrito de
+        // verdade pra essa transmissão nova).
+        const stillLive = new Set(list.filter((p) => p.live).map((p) => p.userId))
+        const watchingUserIds = new Set(
+          [...state.watchingUserIds].filter((id) => stillLive.has(id))
+        )
+        return { participants: list, watchingUserIds }
+      })
     })
 
     phoenixChannel = channel
@@ -133,6 +190,10 @@ export const useGoLiveStore = create<GoLiveState>((set, get) => ({
     room = null
     phoenixChannel?.leave()
     phoenixChannel = null
+    // Defensivo — se saiu do canal ainda transmitindo, sem isso a pessoa
+    // ficaria com a própria voz dos outros mudo pra sempre (ver
+    // localPlaybackMuted em voiceStore.ts).
+    useVoiceStore.getState().setLocalPlaybackMuted(false)
     set({
       status: 'idle',
       channelId: null,
@@ -140,23 +201,74 @@ export const useGoLiveStore = create<GoLiveState>((set, get) => ({
       isLive: false,
       localStream: null,
       remoteStreams: {},
+      watchingUserIds: new Set(),
       error: null
     })
   },
 
-  startGoLive: async (sourceId) => {
+  // Escolher assistir uma transmissão específica — setSubscribed(true) em
+  // cada track publicada por essa pessoa (vídeo e, se tiver, áudio). Sem
+  // isso ligado, o LiveKit nem manda os bytes (autoSubscribe: false acima)
+  // — clicar "Entrar" é o que liga o download de verdade, não só a UI.
+  watchStream: (peerId) => {
+    const participant = room?.remoteParticipants.get(peerId)
+    participant?.trackPublications.forEach((pub) => pub.setSubscribed(true))
+    set((state) => ({ watchingUserIds: new Set(state.watchingUserIds).add(peerId) }))
+  },
+
+  // "Sair" da transmissão de alguém — desinscreve de verdade (para de
+  // baixar vídeo/áudio, não só esconde na UI) e já limpa o stream local
+  // na hora, sem esperar o TrackUnsubscribed assíncrono voltar do servidor.
+  stopWatchingStream: (peerId) => {
+    const participant = room?.remoteParticipants.get(peerId)
+    participant?.trackPublications.forEach((pub) => pub.setSubscribed(false))
+    set((state) => {
+      const watchingUserIds = new Set(state.watchingUserIds)
+      watchingUserIds.delete(peerId)
+      const remoteStreams = { ...state.remoteStreams }
+      delete remoteStreams[peerId]
+      return { watchingUserIds, remoteStreams }
+    })
+  },
+
+  startGoLive: async (sourceId, includeSystemAudio) => {
     const channel = phoenixChannel
     if (!channel || !room) return
     set({ error: null })
 
-    await window.api.screenShare.selectSource(sourceId)
+    await window.api.screenShare.selectSource(sourceId, includeSystemAudio)
 
     let stream: MediaStream
+    let audioCaptureFailed = false
     try {
-      stream = await navigator.mediaDevices.getDisplayMedia({ video: true })
+      // `audio: 'loopback'` (main/index.ts) só é pedido quando includeSystemAudio
+      // é true — precisa desse `audio: true` aqui também pro Electron de
+      // fato anexar a track capturada ao MediaStream devolvido.
+      stream = await navigator.mediaDevices.getDisplayMedia({
+        video: true,
+        audio: includeSystemAudio
+      })
     } catch (err) {
-      set({ error: err instanceof Error ? `Go Live: ${err.message}` : 'falha ao capturar a tela' })
-      return
+      if (!includeSystemAudio) {
+        set({ error: err instanceof Error ? `Go Live: ${err.message}` : 'falha ao capturar a tela' })
+        return
+      }
+      // Testado ao vivo: loopback de áudio do Windows falha
+      // (NotReadableError) em algumas placas/dispositivos de áudio (USB/sem
+      // fio, confirmado numa máquina real) — limitação de driver, não algo
+      // que dê pra corrigir daqui. Em vez de travar a transmissão inteira
+      // por causa só do áudio, tenta de novo sem pedir som.
+      await window.api.screenShare.selectSource(sourceId, false)
+      try {
+        stream = await navigator.mediaDevices.getDisplayMedia({ video: true })
+        audioCaptureFailed = true
+      } catch (videoErr) {
+        set({
+          error:
+            videoErr instanceof Error ? `Go Live: ${videoErr.message}` : 'falha ao capturar a tela'
+        })
+        return
+      }
     }
 
     const reply = await new Promise<{ ok: boolean; token?: string; url?: string }>((resolve) => {
@@ -174,8 +286,10 @@ export const useGoLiveStore = create<GoLiveState>((set, get) => ({
 
     try {
       await room.disconnect()
-      await room.connect(reply.url, reply.token)
+      await room.connect(reply.url, reply.token, { autoSubscribe: false })
       await room.localParticipant.publishTrack(stream.getVideoTracks()[0])
+      const audioTrack = stream.getAudioTracks()[0]
+      if (audioTrack) await room.localParticipant.publishTrack(audioTrack)
     } catch (err) {
       stream.getTracks().forEach((track) => track.stop())
       phoenixChannel?.push('golive:stop', {})
@@ -183,18 +297,35 @@ export const useGoLiveStore = create<GoLiveState>((set, get) => ({
       return
     }
 
-    const track = stream.getVideoTracks()[0]
-    if (track) track.onended = () => get().stopGoLive()
+    const videoTrack = stream.getVideoTracks()[0]
+    if (videoTrack) videoTrack.onended = () => get().stopGoLive()
 
-    set({ isLive: true, localStream: stream })
+    // Reconectar (acima) invalida as inscrições anteriores — limpa streams
+    // antigos; quem eu ainda quiser assistir volta sozinho via
+    // TrackPublished + watchingUserIds já preservado.
+    const audioIncluded = includeSystemAudio && !audioCaptureFailed
+    if (audioIncluded) useVoiceStore.getState().setLocalPlaybackMuted(true)
+    set({
+      isLive: true,
+      localStream: stream,
+      remoteStreams: {},
+      error: audioCaptureFailed
+        ? 'não foi possível capturar o som do PC nesse dispositivo de áudio — transmitindo só a tela'
+        : null
+    })
   },
 
   stopGoLive: () => {
     const stream = get().localStream
-    const track = stream?.getVideoTracks()[0]
-    if (track && room) room.localParticipant.unpublishTrack(track)
+    if (room) {
+      const videoTrack = stream?.getVideoTracks()[0]
+      const audioTrack = stream?.getAudioTracks()[0]
+      if (videoTrack) room.localParticipant.unpublishTrack(videoTrack)
+      if (audioTrack) room.localParticipant.unpublishTrack(audioTrack)
+    }
     stream?.getTracks().forEach((t) => t.stop())
     phoenixChannel?.push('golive:stop', {})
+    useVoiceStore.getState().setLocalPlaybackMuted(false)
     set({ isLive: false, localStream: null })
   }
 }))

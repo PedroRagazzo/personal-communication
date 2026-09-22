@@ -70,6 +70,25 @@ function registerPermissionHandlers(): void {
 // qual foi escolhida (`select-source`) e só então chama
 // getDisplayMedia(), que dispara o handler abaixo já sabendo o que liberar.
 let pendingScreenSourceId: string | null = null
+// Som do PC no Go Live (v1.3.0, a pedido do usuário): `audio: 'loopback'`
+// é a única forma documentada do Electron de capturar áudio do sistema
+// nesse fluxo de fonte customizada (não tem o checkbox nativo "compartilhar
+// áudio" do picker do Chrome, porque esse app nunca usa o picker nativo).
+// Só Windows — mesma limitação documentada em toda a API. É captura de
+// TODO o áudio do sistema, não só da fonte de vídeo escolhida (o Windows
+// não tem como isolar áudio por janela nesse mecanismo).
+//
+// Testado ao vivo (v1.3.0) e achado um limite real de hardware, não do
+// código: nessa máquina de teste (headset USB sem fio Logitech como saída
+// padrão), a captura de loopback falha com `NotReadableError: Could not
+// start audio source` — reproduzido também com `'loopbackWithMute'`, e
+// combina exatamente com vários issues abertos no repositório do próprio
+// Electron ao longo dos anos sobre loopback falhar com dispositivos de
+// áudio USB específicos no Windows (não é algo que o código desse app
+// possa contornar — é o WASAPI do driver do dispositivo). Por isso
+// `goLiveStore.ts` sempre tenta de novo só com vídeo se a captura com
+// áudio falhar, em vez de travar a transmissão inteira por causa do som.
+let pendingScreenAudio = false
 
 function registerScreenShareHandlers(): void {
   ipcMain.handle('screen-share:list-sources', async () => {
@@ -84,13 +103,19 @@ function registerScreenShareHandlers(): void {
     }))
   })
 
-  ipcMain.handle('screen-share:select-source', (_event, sourceId: string) => {
-    pendingScreenSourceId = sourceId
-  })
+  ipcMain.handle(
+    'screen-share:select-source',
+    (_event, sourceId: string, includeAudio: boolean = false) => {
+      pendingScreenSourceId = sourceId
+      pendingScreenAudio = includeAudio
+    }
+  )
 
   session.defaultSession.setDisplayMediaRequestHandler((_request, callback) => {
     const sourceId = pendingScreenSourceId
+    const includeAudio = pendingScreenAudio
     pendingScreenSourceId = null
+    pendingScreenAudio = false
 
     if (!sourceId) {
       callback({})
@@ -99,7 +124,11 @@ function registerScreenShareHandlers(): void {
 
     desktopCapturer.getSources({ types: ['screen', 'window'] }).then((sources) => {
       const match = sources.find((source) => source.id === sourceId)
-      callback(match ? { video: match } : {})
+      if (!match) {
+        callback({})
+        return
+      }
+      callback(includeAudio ? { video: match, audio: 'loopback' } : { video: match })
     })
   })
 }

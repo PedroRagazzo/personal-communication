@@ -32,6 +32,7 @@ export function VoicePanel({
   const participants = useVoiceStore((s) => s.participants)
   const localMuted = useVoiceStore((s) => s.localMuted)
   const localDeafened = useVoiceStore((s) => s.localDeafened)
+  const localPlaybackMuted = useVoiceStore((s) => s.localPlaybackMuted)
   const remoteAudioStreams = useVoiceStore((s) => s.remoteAudioStreams)
   const speakingUserIds = useVoiceStore((s) => s.speakingUserIds)
   const screenSharing = useVoiceStore((s) => s.screenSharing)
@@ -56,11 +57,14 @@ export function VoicePanel({
   const isLive = useGoLiveStore((s) => s.isLive)
   const localLiveStream = useGoLiveStore((s) => s.localStream)
   const remoteLiveStreams = useGoLiveStore((s) => s.remoteStreams)
+  const watchingUserIds = useGoLiveStore((s) => s.watchingUserIds)
   const goLiveError = useGoLiveStore((s) => s.error)
   const joinGoLive = useGoLiveStore((s) => s.join)
   const leaveGoLive = useGoLiveStore((s) => s.leave)
   const startGoLive = useGoLiveStore((s) => s.startGoLive)
   const stopGoLive = useGoLiveStore((s) => s.stopGoLive)
+  const watchStream = useGoLiveStore((s) => s.watchStream)
+  const stopWatchingStream = useGoLiveStore((s) => s.stopWatchingStream)
 
   const [pickerTarget, setPickerTarget] = useState<'screen' | 'golive' | null>(null)
 
@@ -241,18 +245,21 @@ export function VoicePanel({
             <ScreenShareGrid shares={screenShares} currentUserId={currentUserId} />
           )}
 
-          {localLiveStream && <RemoteVideo stream={localLiveStream} label="● Você está ao vivo" muted live />}
-          {Object.entries(remoteLiveStreams).map(([peerId, stream]) => (
-            <RemoteVideo
-              key={peerId}
-              stream={stream}
-              label={`● ${participantName(peerId)} está ao vivo`}
-              live
-            />
-          ))}
+          {localLiveStream && (
+            <RemoteVideo stream={localLiveStream} label="● Você está ao vivo" muted live large />
+          )}
+          <GoLiveStreams
+            participants={goLiveParticipants.filter((p) => p.live && p.userId !== currentUserId)}
+            remoteStreams={remoteLiveStreams}
+            watchingUserIds={watchingUserIds}
+            localPlaybackMuted={localPlaybackMuted}
+            watchStream={watchStream}
+            stopWatchingStream={stopWatchingStream}
+            participantName={participantName}
+          />
 
           {Object.entries(remoteAudioStreams).map(([peerId, stream]) => (
-            <RemoteAudio key={peerId} stream={stream} muted={localDeafened} />
+            <RemoteAudio key={peerId} stream={stream} muted={localDeafened || localPlaybackMuted} />
           ))}
         </>
       )}
@@ -260,11 +267,12 @@ export function VoicePanel({
       {pickerTarget && (
         <ScreenSharePicker
           showQuality={pickerTarget === 'screen'}
-          onSelect={(sourceId, quality) => {
+          showAudioOption={pickerTarget === 'golive'}
+          onSelect={(sourceId, quality, includeAudio) => {
             const target = pickerTarget
             setPickerTarget(null)
             if (target === 'screen') startScreenShare(sourceId, quality)
-            else startGoLive(sourceId)
+            else startGoLive(sourceId, includeAudio)
           }}
           onCancel={() => setPickerTarget(null)}
         />
@@ -384,6 +392,79 @@ function ScreenShareQualityMenu({
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+// Transmissões dos outros (Go Live) — assistir agora é uma escolha, não
+// automático (v1.3.0, a pedido do usuário): quem está ao vivo aparece como
+// um cartão compacto com "ENTRAR"; só depois desse clique é que o vídeo/
+// áudio de verdade começa a chegar (goLiveStore.watchStream faz o
+// setSubscribed(true) real no LiveKit, não só abre a UI). "SAIR" desinscreve
+// de verdade. A própria transmissão (localLiveStream) continua renderizando
+// direto, sem esse passo — ver acima.
+function GoLiveStreams({
+  participants,
+  remoteStreams,
+  watchingUserIds,
+  localPlaybackMuted,
+  watchStream,
+  stopWatchingStream,
+  participantName
+}: {
+  participants: { userId: string }[]
+  remoteStreams: Record<string, MediaStream>
+  watchingUserIds: Set<string>
+  localPlaybackMuted: boolean
+  watchStream: (peerId: string) => void
+  stopWatchingStream: (peerId: string) => void
+  participantName: (userId: string) => string
+}) {
+  if (participants.length === 0) return null
+
+  return (
+    <div className="w-full space-y-3">
+      {participants.map((p) => {
+        const watching = watchingUserIds.has(p.userId)
+        const stream = remoteStreams[p.userId]
+
+        if (watching && stream) {
+          return (
+            <div key={p.userId} className="w-full space-y-1.5">
+              <RemoteVideo
+                stream={stream}
+                label={`● ${participantName(p.userId)} está ao vivo`}
+                muted={localPlaybackMuted}
+                live
+                large
+              />
+              <button
+                onClick={() => stopWatchingStream(p.userId)}
+                className="bevel-sm border border-line bg-panel px-3 py-1.5 font-mono text-xs tracking-wide text-mist-dim transition hover:border-plasma/60 hover:text-plasma"
+              >
+                SAIR DA TRANSMISSÃO
+              </button>
+            </div>
+          )
+        }
+
+        return (
+          <div
+            key={p.userId}
+            className="bevel-sm flex w-full items-center justify-between border border-plasma/60 bg-plasma/10 px-4 py-3"
+          >
+            <span className="font-mono text-xs font-bold tracking-wide text-plasma">
+              ● {participantName(p.userId)} está ao vivo
+            </span>
+            <button
+              onClick={() => watchStream(p.userId)}
+              className="bevel-sm bg-plasma px-4 py-1.5 font-display text-xs font-bold tracking-[0.1em] text-void transition hover:bg-plasma-soft"
+            >
+              ENTRAR
+            </button>
+          </div>
+        )
+      })}
     </div>
   )
 }

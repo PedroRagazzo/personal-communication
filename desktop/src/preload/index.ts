@@ -17,8 +17,8 @@ const api = {
   },
   screenShare: {
     listSources: (): Promise<ScreenSource[]> => ipcRenderer.invoke('screen-share:list-sources'),
-    selectSource: (sourceId: string): Promise<void> =>
-      ipcRenderer.invoke('screen-share:select-source', sourceId)
+    selectSource: (sourceId: string, includeAudio?: boolean): Promise<void> =>
+      ipcRenderer.invoke('screen-share:select-source', sourceId, includeAudio ?? false)
   },
   // Janela sem moldura nativa (TitleBar.tsx desenha tudo) — o renderer não
   // tem como se minimizar/maximizar/fechar sozinho, só o processo main pode.

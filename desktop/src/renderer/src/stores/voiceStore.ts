@@ -31,6 +31,13 @@ interface VoiceState {
   participants: VoiceParticipant[]
   localMuted: boolean
   localDeafened: boolean
+  // Sem relação com mute/deafen (que também mexem no mic) — só reprodução
+  // local. Ligado pelo goLiveStore enquanto a pessoa transmite a própria
+  // tela COM som do PC (ver startGoLive): sem isso, o áudio de voz que o
+  // app está tocando pelos alto-falantes entraria na captura de loopback
+  // do sistema e voltaria pra quem está assistindo — inclusive pra quem
+  // já ouve a mesma voz ao vivo pela chamada, um eco duplicado.
+  localPlaybackMuted: boolean
   localAudioStream: MediaStream | null
   remoteAudioStreams: Record<string, MediaStream>
   speakingUserIds: Set<string>
@@ -51,6 +58,7 @@ interface VoiceState {
   stopScreenShare: () => void
   toggleVideo: () => Promise<void>
   setMicSensitivity: (value: number) => void
+  setLocalPlaybackMuted: (muted: boolean) => void
 }
 
 let phoenixChannel: Channel | null = null
@@ -69,6 +77,7 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
   participants: [],
   localMuted: false,
   localDeafened: false,
+  localPlaybackMuted: false,
   localAudioStream: null,
   remoteAudioStreams: {},
   speakingUserIds: new Set(),
@@ -289,6 +298,7 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
       speakingUserIds: new Set(),
       localMuted: false,
       localDeafened: false,
+      localPlaybackMuted: false,
       screenSharing: false,
       localScreenStream: null,
       screenShareQuality: null,
@@ -487,5 +497,11 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
   // o valor novo de qualquer forma, lido do settingsStore em join().
   setMicSensitivity: (value) => {
     speakingDetector?.setThreshold(value)
+  },
+
+  // Chamado pelo goLiveStore, não por UI direta — ver o comentário de
+  // `localPlaybackMuted` na interface acima.
+  setLocalPlaybackMuted: (muted) => {
+    set({ localPlaybackMuted: muted })
   }
 }))
