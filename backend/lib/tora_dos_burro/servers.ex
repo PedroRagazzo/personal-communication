@@ -102,6 +102,44 @@ defmodule ToraDosBurro.Servers do
     |> Repo.insert()
   end
 
+  @doc """
+  Avisa quem já está com o servidor selecionado (topic `server:{id}`, ver
+  ServerChannel) que um membro novo entrou (v1.6.0, bug real reportado
+  pelo usuário: gente nova aparecendo como "desconhecido" no chat/voz, e
+  sumindo por completo da barra de quem-está-online — as duas telas
+  cruzam contra `serversStore.members` no cliente, que só era buscado uma
+  vez por seleção de servidor e nunca mais atualizado).
+
+  Deliberadamente **não** mora dentro de `join_server/2`/`do_add_member`:
+  `use_invite/2` chama `join_server/2` de dentro de uma `Repo.transaction`,
+  e um broadcast não é transacional — dispara na hora, não espera o
+  commit. Se ele morasse ali dentro e a transação desse rollback depois
+  (ex.: falha ao incrementar `uses` do convite), quem já estava olhando
+  o servidor teria recebido um "entrou" pra alguém que, no banco, nunca
+  chegou a entrar de verdade. Por isso os dois chamadores (`use_invite/2`
+  abaixo e `AuthController.register/2`) só chamam isso DEPOIS de já terem
+  a confirmação real (transação commitada / insert direto sem transação).
+
+  Recebe `user` já carregado em vez de fazer `Repo.preload(member, :user)`
+  — os dois chamadores já têm o `%User{}` em mãos, não vale a pena mais
+  uma query só pra isso. `roles` sempre `[]` — ninguém entra com cargo
+  nenhum além do `@everyone` implícito, que não é uma linha em
+  `member_roles`.
+  """
+  def notify_member_joined(%Server{} = server, %ServerMember{} = member, %User{} = user) do
+    ToraDosBurroWeb.Endpoint.broadcast("server:#{server.id}", "member:joined", %{
+      member: %{
+        id: member.id,
+        nickname: member.nickname,
+        joined_at: member.joined_at,
+        user: %{id: user.id, username: user.username, discriminator: user.discriminator},
+        roles: []
+      }
+    })
+
+    :ok
+  end
+
   def leave_server(%Server{owner_id: owner_id}, %User{id: owner_id}) do
     {:error, :owner_cannot_leave}
   end
@@ -226,13 +264,21 @@ defmodule ToraDosBurro.Servers do
       true ->
         Repo.transaction(fn ->
           with {:ok, server} <- fetch_server(invite.server_id),
-               {:ok, _member} <- join_server(server, user),
+               {:ok, member} <- join_server(server, user),
                {:ok, _invite} <- Repo.update(Ecto.Changeset.change(invite, uses: invite.uses + 1)) do
-            server
+            {server, member}
           else
             {:error, reason} -> Repo.rollback(reason)
           end
         end)
+        |> case do
+          {:ok, {server, member}} ->
+            notify_member_joined(server, member, user)
+            {:ok, server}
+
+          error ->
+            error
+        end
     end
   end
 

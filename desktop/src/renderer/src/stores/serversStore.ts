@@ -19,6 +19,7 @@ interface ServersState {
     type: 'guild_text' | 'guild_voice'
   ) => Promise<boolean>
   joinServer: (accessToken: string, code: string) => Promise<boolean>
+  addMember: (serverId: string, member: api.ServerMember) => void
   reset: () => void
 }
 
@@ -128,6 +129,22 @@ export const useServersStore = create<ServersState>((set, get) => ({
       })
       return false
     }
+  },
+
+  // Chamado por presenceStore.ts quando o evento `member:joined` chega no
+  // topic `server:{id}` (v1.6.0, bug real reportado: gente nova aparecendo
+  // como "desconhecido" no chat/voz e sumindo da barra de quem-está-online
+  // — `members` só era buscado uma vez por seleção de servidor, nunca mais
+  // atualizado). Ignora se for pra um servidor diferente do selecionado
+  // agora (o listener no canal fica registrado mesmo depois de trocar de
+  // servidor, já que o canal só é reaberto quando presenceStore.join troca
+  // de topic — ver lá) ou se a pessoa já está na lista (evita duplicar
+  // numa reconexão/resync).
+  addMember: (serverId, member) => {
+    const state = get()
+    if (state.selectedServerId !== serverId) return
+    if (state.members.some((m) => m.user.id === member.user.id)) return
+    set({ members: [...state.members, member] })
   },
 
   reset: () => set(initialState)

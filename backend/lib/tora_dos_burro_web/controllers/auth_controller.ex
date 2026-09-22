@@ -65,8 +65,9 @@ defmodule ToraDosBurroWeb.AuthController do
   defp maybe_join_default_server(user) do
     with server_id when is_binary(server_id) <-
            Application.get_env(:tora_dos_burro, :default_server_id),
-         {:ok, server} <- Servers.fetch_server(server_id) do
-      Servers.join_server(server, user)
+         {:ok, server} <- Servers.fetch_server(server_id),
+         {:ok, member} <- Servers.join_server(server, user) do
+      Servers.notify_member_joined(server, member, user)
     end
   end
 

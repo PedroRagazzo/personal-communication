@@ -331,7 +331,18 @@ export function VoicePanel({
             <RemoteAudio
               key={peerId}
               stream={stream}
-              muted={localDeafened || localPlaybackMuted}
+              // v1.6.0, bug real reportado: `localPlaybackMuted` entrava
+              // aqui também, deixando quem transmite com som do PC incapaz
+              // de ouvir a própria call — a call é a única coisa que a
+              // pessoa realmente precisa continuar ouvindo enquanto
+              // transmite. Efeito colateral aceito conscientemente: a voz
+              // dela na call agora entra na captura de loopback igual a
+              // qualquer outro som do PC, então quem estiver assistindo E
+              // na mesma call pode ouvir um leve eco com atraso da própria
+              // voz do streamer — mitigável abaixando o volume dessa
+              // transmissão especificamente (botão direito na tela/
+              // transmissão), não vale travar a call pra evitar isso.
+              muted={localDeafened}
               volume={remoteMicVolumes[peerId] ?? 1}
             />
           ))}
@@ -632,6 +643,15 @@ function ThumbnailVideo({ stream }: { stream: MediaStream }) {
   return <video ref={ref} autoPlay muted className="h-20 w-32 bg-black object-cover" />
 }
 
+// `HTMLMediaElement.volume` só aceita [0, 1] (nativamente não existe
+// "boost" acima de 100% — isso precisaria de um GainNode via Web Audio
+// API, não construído aqui) — clamp defensivo, não só o slider capado em
+// 100% abaixo, porque um valor já salvo antes dessa correção (ou algum
+// caminho futuro que reintroduza >100%) não pode voltar a derrubar o app.
+function clampVolume(volume: number): number {
+  return Math.min(1, Math.max(0, volume))
+}
+
 function RemoteAudio({
   stream,
   muted,
@@ -649,9 +669,13 @@ function RemoteAudio({
 
   // `volume` não é um atributo HTML de verdade (é só propriedade do
   // elemento) — o React não reflete isso de forma confiável via prop JSX,
-  // então precisa aplicar via ref igual ao srcObject acima.
+  // então precisa aplicar via ref igual ao srcObject acima. `HTMLMediaElement
+  // .volume` só aceita [0, 1] — atribuir fora disso lança DOMException (não
+  // clampa sozinho); sem isso, um valor > 1 derrubava a árvore inteira do
+  // React (sem error boundary no app) — bug real reportado pelo usuário,
+  // ver clampVolume/VolumeMenu abaixo.
   useEffect(() => {
-    if (ref.current) ref.current.volume = volume
+    if (ref.current) ref.current.volume = clampVolume(volume)
   }, [volume])
 
   return <audio ref={ref} autoPlay muted={muted} />
@@ -683,7 +707,7 @@ function RemoteVideo({
   }, [stream])
 
   useEffect(() => {
-    if (ref.current) ref.current.volume = volume
+    if (ref.current) ref.current.volume = clampVolume(volume)
   }, [volume])
 
   return (
@@ -701,10 +725,20 @@ function RemoteVideo({
   )
 }
 
-// Menu de contexto de volume (botão direito) — slider 0–200%, estilo
-// Discord. Fecha só ao clicar fora (não por mouseleave) — mesmo motivo já
-// documentado em ScreenShareQualityMenu: sendo `fixed`/fora do fluxo, um
-// mouseleave no vão até o slider fecharia cedo demais.
+// Menu de contexto de volume (botão direito) — slider 0–100%. Fecha só ao
+// clicar fora (não por mouseleave) — mesmo motivo já documentado em
+// ScreenShareQualityMenu: sendo `fixed`/fora do fluxo, um mouseleave no
+// vão até o slider fecharia cedo demais.
+//
+// v1.6.0, bug real reportado (app crashava ao mexer no volume de outra
+// pessoa): a primeira versão ia até 200% ("boost", estilo Discord), mas
+// `HTMLMediaElement.volume` só aceita [0, 1] — atribuir um valor > 1
+// lança `DOMException`, e sem error boundary nenhum no app isso derrubava
+// a árvore inteira do React (tela em branco). Fazer o boost de verdade
+// precisaria de um `GainNode` via Web Audio API por elemento — escopo bem
+// maior que o pedido original ("poder mudar o volume"); capado em 100%
+// em vez disso, que é exatamente o que a API nativa já suporta sem exigir
+// nenhuma peça nova.
 function VolumeMenu({
   x,
   y,
@@ -743,7 +777,7 @@ function VolumeMenu({
       <input
         type="range"
         min={0}
-        max={200}
+        max={100}
         step={5}
         value={percent}
         onChange={(e) => onChange(Number(e.target.value) / 100)}

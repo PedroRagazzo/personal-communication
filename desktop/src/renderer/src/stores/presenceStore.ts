@@ -2,6 +2,8 @@ import { create } from 'zustand'
 import { Presence } from 'phoenix'
 import type { Channel } from 'phoenix'
 import { getSocket } from '../services/socket'
+import { useServersStore } from './serversStore'
+import type { ServerMember } from '../services/api'
 
 // Presença de "quem está online no app" — topic `server:{id}`, diferente
 // de `voice:{id}` (quem está numa chamada específica, ver voiceStore.ts).
@@ -32,6 +34,13 @@ export const usePresenceStore = create<PresenceState>((set, get) => ({
     const presence = new Presence(channel)
     presence.onSync(() => {
       set({ onlineUserIds: new Set(presence.list<string>((userId) => userId)) })
+    })
+
+    // v1.6.0 — quem já está com esse servidor selecionado recebe ao vivo
+    // quem entrou agora (ver Servers.notify_member_joined no backend),
+    // em vez de só descobrir na próxima vez que reselecionar o servidor.
+    channel.on('member:joined', (payload: { member: ServerMember }) => {
+      useServersStore.getState().addMember(serverId, payload.member)
     })
 
     channel.join()

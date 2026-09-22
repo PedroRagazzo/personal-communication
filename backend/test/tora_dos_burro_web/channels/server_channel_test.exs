@@ -74,4 +74,44 @@ defmodule ToraDosBurroWeb.ServerChannelTest do
 
     assert_broadcast "presence_diff", %{leaves: %{^owner_id => _}}
   end
+
+  describe "member:joined (v1.6.0)" do
+    test "quem já está no servidor recebe o membro novo ao vivo, via convite", %{
+      owner: owner,
+      server: server
+    } do
+      owner_socket = connect_as(owner)
+      {:ok, _, _owner_channel} = subscribe_and_join(owner_socket, "server:#{server.id}", %{})
+
+      {:ok, newcomer} = register("servernewcomer")
+      newcomer_id = newcomer.id
+      {:ok, invite} = Servers.create_invite(server, owner, %{})
+
+      assert {:ok, _server} = Servers.use_invite(invite, newcomer)
+
+      assert_broadcast "member:joined", %{
+        member: %{user: %{id: ^newcomer_id, username: "servernewcomer"}}
+      }
+    end
+
+    test "convite que dá rollback de verdade (usuário banido) não avisa ninguém", %{
+      owner: owner,
+      server: server
+    } do
+      owner_socket = connect_as(owner)
+      {:ok, _, _owner_channel} = subscribe_and_join(owner_socket, "server:#{server.id}", %{})
+
+      {:ok, banned_user} = register("serverbannedinvite")
+      {:ok, _ban} = Servers.create_ban(server, owner, banned_user)
+      {:ok, invite} = Servers.create_invite(server, owner, %{})
+
+      # join_server/2 falha dentro da transação (usuário banido) — força
+      # um rollback de verdade, diferente do cond-check de max_uses/expirado
+      # no topo de use_invite/2, que nem chega a abrir transação. Confirma
+      # que notify_member_joined/3 só dispara DEPOIS de um commit real, não
+      # de dentro da transação em si (ver o comentário na implementação).
+      assert {:error, :banned} = Servers.use_invite(invite, banned_user)
+      refute_broadcast "member:joined", %{}
+    end
+  end
 end
