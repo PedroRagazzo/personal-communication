@@ -35,6 +35,7 @@ interface VoiceState {
   speakingUserIds: Set<string>
   screenSharing: boolean
   localScreenStream: MediaStream | null
+  screenShareQuality: ScreenShareQuality | null
   remoteScreenStreams: Record<string, MediaStream>
   videoEnabled: boolean
   localCameraStream: MediaStream | null
@@ -45,6 +46,7 @@ interface VoiceState {
   toggleMute: () => void
   toggleDeafen: () => void
   startScreenShare: (sourceId: string, quality: ScreenShareQuality) => Promise<void>
+  updateScreenShareQuality: (quality: ScreenShareQuality) => Promise<void>
   stopScreenShare: () => void
   toggleVideo: () => Promise<void>
 }
@@ -52,6 +54,12 @@ interface VoiceState {
 let phoenixChannel: Channel | null = null
 let mesh: MeshManager | null = null
 let speakingDetector: SpeakingDetector | null = null
+// Guardada pra poder recapturar a MESMA fonte com novos parâmetros de
+// qualidade sem reabrir o ScreenSharePicker (ver updateScreenShareQuality
+// abaixo) — o handler do main (setDisplayMediaRequestHandler) consome
+// `pendingScreenSourceId` a cada chamada (main/index.ts), então cada
+// recaptura precisa chamar selectSource de novo com o mesmo id.
+let lastScreenSourceId: string | null = null
 
 export const useVoiceStore = create<VoiceState>((set, get) => ({
   status: 'idle',
@@ -64,6 +72,7 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
   speakingUserIds: new Set(),
   screenSharing: false,
   localScreenStream: null,
+  screenShareQuality: null,
   remoteScreenStreams: {},
   videoEnabled: false,
   localCameraStream: null,
@@ -254,6 +263,7 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
     speakingDetector = null
     phoenixChannel?.leave()
     phoenixChannel = null
+    lastScreenSourceId = null
     set({
       status: 'idle',
       channelId: null,
@@ -265,6 +275,7 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
       localDeafened: false,
       screenSharing: false,
       localScreenStream: null,
+      screenShareQuality: null,
       remoteScreenStreams: {},
       videoEnabled: false,
       localCameraStream: null,
@@ -345,13 +356,66 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
     if (track) {
       track.onended = () => get().stopScreenShare()
     }
-    set({ screenSharing: true, localScreenStream: stream })
+    lastScreenSourceId = sourceId
+    set({ screenSharing: true, localScreenStream: stream, screenShareQuality: quality })
+  },
+
+  // Muda resolução/fps já transmitindo: recaptura a MESMA fonte (guardada
+  // acima) nos novos parâmetros e troca a track com mesh.setScreenTrack.
+  // Como o RTCRtpSender de tela já existe (negociado no início do
+  // compartilhamento), isso é só um replaceTrack local em cada peer — sem
+  // renegociação e sem precisar avisar o servidor (screen_share:start já
+  // foi confirmado, ninguém trocou quem está compartilhando).
+  updateScreenShareQuality: async (quality) => {
+    const current = get().localScreenStream
+    if (!get().screenSharing || !mesh || !lastScreenSourceId || !current) return
+    set({ error: null })
+
+    // Para a captura atual ANTES de pedir a nova — testado ao vivo: se a
+    // antiga ainda está viva no momento do getDisplayMedia, o Chromium
+    // reaproveita a sessão de captura já em andamento pra essa mesma fonte
+    // e ignora os novos parâmetros de resolução/fps por completo (a troca
+    // "funcionava" do lado do sender — track id novo, sem erro — mas o
+    // vídeo de verdade nunca mudava de qualidade pro peer remoto).
+    current.getTracks().forEach((track) => track.stop())
+
+    await window.api.screenShare.selectSource(lastScreenSourceId)
+
+    let stream: MediaStream
+    try {
+      stream = await navigator.mediaDevices.getDisplayMedia({
+        video: {
+          width: { ideal: quality.width },
+          height: { ideal: quality.height },
+          frameRate: { ideal: quality.frameRate }
+        }
+      })
+    } catch (err) {
+      // A captura antiga já foi parada acima — não tem como manter o
+      // compartilhamento anterior rodando, então encerra de vez (mesma
+      // limpeza de stopScreenShare, inclusive avisando o servidor) em vez
+      // de deixar um estado "compartilhando" com uma track morta.
+      get().stopScreenShare()
+      set({
+        error:
+          err instanceof Error ? `qualidade da tela: ${err.message}` : 'falha ao mudar a qualidade da tela'
+      })
+      return
+    }
+
+    mesh.setScreenTrack(stream)
+    const track = stream.getVideoTracks()[0]
+    if (track) {
+      track.onended = () => get().stopScreenShare()
+    }
+    set({ localScreenStream: stream, screenShareQuality: quality })
   },
 
   stopScreenShare: () => {
     mesh?.setScreenTrack(null)
     phoenixChannel?.push('screen_share:stop', {})
-    set({ screenSharing: false, localScreenStream: null })
+    lastScreenSourceId = null
+    set({ screenSharing: false, localScreenStream: null, screenShareQuality: null })
   },
 
   toggleVideo: async () => {

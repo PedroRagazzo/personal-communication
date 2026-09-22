@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ChannelSummary, ServerMember } from '../services/api'
 import { useVoiceStore, type ScreenShareQuality } from '../stores/voiceStore'
 import { useGoLiveStore } from '../stores/goLiveStore'
-import { ScreenSharePicker } from './ScreenSharePicker'
+import { ScreenSharePicker, RESOLUTIONS, FRAME_RATES } from './ScreenSharePicker'
 
 // Voz (FASE 11, fatia 4) + compartilhamento de tela (fatia 5) + câmera
 // (fatia 6) + Go Live (fatia 10): conectar entra no mesh WebRTC de
@@ -36,6 +36,7 @@ export function VoicePanel({
   const speakingUserIds = useVoiceStore((s) => s.speakingUserIds)
   const screenSharing = useVoiceStore((s) => s.screenSharing)
   const localScreenStream = useVoiceStore((s) => s.localScreenStream)
+  const screenShareQuality = useVoiceStore((s) => s.screenShareQuality)
   const remoteScreenStreams = useVoiceStore((s) => s.remoteScreenStreams)
   const videoEnabled = useVoiceStore((s) => s.videoEnabled)
   const localCameraStream = useVoiceStore((s) => s.localCameraStream)
@@ -46,6 +47,7 @@ export function VoicePanel({
   const toggleMute = useVoiceStore((s) => s.toggleMute)
   const toggleDeafen = useVoiceStore((s) => s.toggleDeafen)
   const startScreenShare = useVoiceStore((s) => s.startScreenShare)
+  const updateScreenShareQuality = useVoiceStore((s) => s.updateScreenShareQuality)
   const stopScreenShare = useVoiceStore((s) => s.stopScreenShare)
   const toggleVideo = useVoiceStore((s) => s.toggleVideo)
 
@@ -199,6 +201,9 @@ export function VoicePanel({
               activeLabel="PARAR TELA"
               label="COMPARTILHAR TELA"
             />
+            {screenSharing && screenShareQuality && (
+              <ScreenShareQualityMenu quality={screenShareQuality} onChange={updateScreenShareQuality} />
+            )}
             <VoiceButton
               onClick={() => (isLive ? stopGoLive() : setPickerTarget('golive'))}
               active={isLive}
@@ -229,6 +234,7 @@ export function VoicePanel({
                   : `${screenShares[0].label} está compartilhando a tela`
               }
               muted={screenShares[0].id === currentUserId}
+              large
             />
           )}
           {screenShares.length > 1 && (
@@ -298,6 +304,73 @@ function VoiceButton({
   )
 }
 
+// Trocar resolução/fps já compartilhando — abre um popover com as mesmas
+// opções do ScreenSharePicker (sem o passo de escolher a fonte de novo,
+// já está compartilhando). onChange chama updateScreenShareQuality, que
+// recaptura a mesma fonte nos novos parâmetros por baixo dos panos.
+function ScreenShareQualityMenu({
+  quality,
+  onChange
+}: {
+  quality: ScreenShareQuality
+  onChange: (quality: ScreenShareQuality) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const currentLabel = RESOLUTIONS.find((res) => res.width === quality.width)?.label ?? `${quality.height}p`
+
+  return (
+    <div className="relative" onMouseLeave={() => setOpen(false)}>
+      <button
+        onClick={() => setOpen((o) => !o)}
+        className="bevel-sm border border-line bg-panel px-4 py-2 font-display text-xs font-bold tracking-wide text-mist-dim transition hover:border-mist-dim hover:text-mist"
+      >
+        {currentLabel} · {quality.frameRate}FPS ⚙
+      </button>
+
+      {open && (
+        <div className="bevel-sm absolute bottom-full left-0 z-10 mb-2 w-56 space-y-2 border border-line-soft bg-panel-2 p-3 shadow-2xl shadow-black/50">
+          <div>
+            <p className="mb-1 font-mono text-[10px] tracking-[0.2em] text-mist-dim">RESOLUÇÃO</p>
+            <div className="flex gap-1">
+              {RESOLUTIONS.map((res) => (
+                <button
+                  key={res.label}
+                  onClick={() => onChange({ ...quality, width: res.width, height: res.height })}
+                  className={`flex-1 border px-2 py-1 font-mono text-xs transition ${
+                    quality.width === res.width
+                      ? 'border-volt bg-volt/10 text-volt'
+                      : 'border-line text-mist-dim hover:text-mist'
+                  }`}
+                >
+                  {res.label}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div>
+            <p className="mb-1 font-mono text-[10px] tracking-[0.2em] text-mist-dim">TAXA DE QUADROS</p>
+            <div className="flex gap-1">
+              {FRAME_RATES.map((fps) => (
+                <button
+                  key={fps}
+                  onClick={() => onChange({ ...quality, frameRate: fps })}
+                  className={`flex-1 border px-2 py-1 font-mono text-xs transition ${
+                    quality.frameRate === fps
+                      ? 'border-volt bg-volt/10 text-volt'
+                      : 'border-line text-mist-dim hover:text-mist'
+                  }`}
+                >
+                  {fps} FPS
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // Duas ou mais pessoas compartilhando tela ao mesmo tempo: em vez de
 // empilhar tudo em vídeos gigantes um embaixo do outro, mostra uma só em
 // destaque (grande) e o resto como miniaturas clicáveis — a pessoa escolhe
@@ -314,11 +387,12 @@ function ScreenShareGrid({
   const focused = shares.find((s) => s.id === focusedId) ?? shares[0]
 
   return (
-    <div className="w-full max-w-4xl space-y-2">
+    <div className="w-full space-y-2">
       <RemoteVideo
         stream={focused.stream}
         label={focused.id === currentUserId ? 'Você está compartilhando a tela' : `${focused.label} está compartilhando a tela`}
         muted={focused.id === currentUserId}
+        large
       />
 
       <div className="flex gap-2 overflow-x-auto pb-1">
@@ -365,12 +439,18 @@ function RemoteVideo({
   stream,
   label,
   muted,
-  live
+  live,
+  large
 }: {
   stream: MediaStream
   label: string
   muted?: boolean
   live?: boolean
+  // Câmera/Go Live ficam num tamanho compacto fixo (max-w-2xl) — tela
+  // compartilhada usa `large` pra preencher a largura do painel em vez de
+  // ficar presa nesses 672px, e continua responsiva porque o limite some,
+  // não vira um tamanho fixo maior.
+  large?: boolean
 }) {
   const ref = useRef<HTMLVideoElement>(null)
 
@@ -379,7 +459,7 @@ function RemoteVideo({
   }, [stream])
 
   return (
-    <div className="w-full max-w-2xl">
+    <div className={`w-full ${large ? '' : 'max-w-2xl'}`}>
       <p className={`mb-1 font-mono text-[11px] tracking-wide ${live ? 'text-plasma' : 'text-mist-dim'}`}>
         {label}
       </p>
