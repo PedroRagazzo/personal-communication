@@ -1,6 +1,8 @@
 import { useEffect } from 'react'
 import { useAuthStore } from '../stores/authStore'
 import { useServersStore } from '../stores/serversStore'
+import { useVoiceStore } from '../stores/voiceStore'
+import { useGoLiveStore } from '../stores/goLiveStore'
 import { ServerSidebar } from '../components/ServerSidebar'
 import { ChannelList } from '../components/ChannelList'
 import { ChatView } from '../components/ChatView'
@@ -26,6 +28,13 @@ export function HomePage() {
   const createChannel = useServersStore((s) => s.createChannel)
   const joinServer = useServersStore((s) => s.joinServer)
 
+  const voiceChannelId = useVoiceStore((s) => s.channelId)
+  const voiceStatus = useVoiceStore((s) => s.status)
+  const voiceParticipants = useVoiceStore((s) => s.participants)
+  const speakingUserIds = useVoiceStore((s) => s.speakingUserIds)
+  const joinVoice = useVoiceStore((s) => s.join)
+  const joinGoLive = useGoLiveStore((s) => s.join)
+
   useEffect(() => {
     if (accessToken) loadServers(accessToken)
   }, [accessToken, loadServers])
@@ -34,6 +43,19 @@ export function HomePage() {
 
   const selectedServer = servers.find((s) => s.id === selectedServerId) ?? null
   const selectedChannel = channels.find((c) => c.id === selectedChannelId) ?? null
+
+  // Igual Discord: clicar num canal de voz já entra direto, sem precisar de
+  // um botão "Conectar" separado (esse continua existindo no VoicePanel só
+  // pra reconectar depois de um "Sair" manual, vendo o mesmo canal). Não
+  // reentra à toa se já estiver conectado exatamente nesse canal.
+  function handleSelectChannel(channelId: string): void {
+    selectChannel(channelId)
+    const channel = channels.find((c) => c.id === channelId)
+    if (channel?.type === 'guild_voice' && voiceChannelId !== channelId) {
+      joinVoice(channelId, user!.id)
+      joinGoLive(channelId)
+    }
+  }
 
   return (
     <div className="flex h-full bg-void text-mist">
@@ -49,8 +71,14 @@ export function HomePage() {
         channels={channels}
         selectedChannelId={selectedChannelId}
         error={serversError}
-        onSelect={selectChannel}
+        onSelect={handleSelectChannel}
         onCreate={(name, type) => createChannel(accessToken, name, type)}
+        members={members}
+        currentUserId={user.id}
+        voiceChannelId={voiceChannelId}
+        voiceStatus={voiceStatus}
+        voiceParticipants={voiceParticipants}
+        speakingUserIds={speakingUserIds}
       />
       <div className="flex flex-1 flex-col">
         <header className="flex items-center justify-between border-b border-line-soft bg-panel px-4 py-3">

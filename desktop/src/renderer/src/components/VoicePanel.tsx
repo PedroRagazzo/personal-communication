@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ChannelSummary, ServerMember } from '../services/api'
-import { useVoiceStore } from '../stores/voiceStore'
+import { useVoiceStore, type ScreenShareQuality } from '../stores/voiceStore'
 import { useGoLiveStore } from '../stores/goLiveStore'
 import { ScreenSharePicker } from './ScreenSharePicker'
 
@@ -33,6 +33,7 @@ export function VoicePanel({
   const localMuted = useVoiceStore((s) => s.localMuted)
   const localDeafened = useVoiceStore((s) => s.localDeafened)
   const remoteAudioStreams = useVoiceStore((s) => s.remoteAudioStreams)
+  const speakingUserIds = useVoiceStore((s) => s.speakingUserIds)
   const screenSharing = useVoiceStore((s) => s.screenSharing)
   const localScreenStream = useVoiceStore((s) => s.localScreenStream)
   const remoteScreenStreams = useVoiceStore((s) => s.remoteScreenStreams)
@@ -60,6 +61,21 @@ export function VoicePanel({
   const stopGoLive = useGoLiveStore((s) => s.stopGoLive)
 
   const [pickerTarget, setPickerTarget] = useState<'screen' | 'golive' | null>(null)
+
+  // Junta a própria tela (se estiver compartilhando) com a de cada peer
+  // remoto numa lista só — é o que decide se mostra uma tela só (como
+  // antes) ou a grade com destaque (2+ ao mesmo tempo).
+  const screenShares = useMemo(() => {
+    const shares: { id: string; stream: MediaStream; label: string }[] = []
+    if (localScreenStream) {
+      shares.push({ id: currentUserId, stream: localScreenStream, label: 'Você' })
+    }
+    for (const [peerId, stream] of Object.entries(remoteScreenStreams)) {
+      shares.push({ id: peerId, stream, label: participantName(peerId) })
+    }
+    return shares
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [localScreenStream, remoteScreenStreams, currentUserId, members])
 
   const connectedHere = status === 'connected' && activeChannelId === channel.id
   const connectingHere = status === 'connecting' && activeChannelId === channel.id
@@ -123,19 +139,21 @@ export function VoicePanel({
               const deafened = isMe ? localDeafened : p.deafened
               const video = isMe ? videoEnabled : p.video
               const live = isParticipantLive(p.userId)
-              const hot = !muted
+              // "Falando agora" de verdade (nível de áudio, ver
+              // webrtc/SpeakingDetector.ts) — não só "não mutado".
+              const speaking = !muted && speakingUserIds.has(p.userId)
 
               return (
                 <li
                   key={p.userId}
                   className={`bevel-sm flex items-center justify-between border px-3.5 py-2.5 text-sm transition ${
-                    hot ? 'border-volt/60 bg-panel glow-volt' : 'border-line bg-panel text-mist-dim'
+                    speaking ? 'border-volt/60 bg-panel glow-volt' : 'border-line bg-panel text-mist-dim'
                   }`}
                 >
                   <span className="flex items-center gap-2 font-medium text-mist">
                     <span
                       className={`h-1.5 w-1.5 rounded-full ${
-                        hot ? 'animate-pulse-live bg-volt' : 'bg-mist-faint'
+                        speaking ? 'animate-pulse-live bg-volt' : 'bg-mist-faint'
                       }`}
                     />
                     {participantName(p.userId)}
@@ -202,16 +220,20 @@ export function VoicePanel({
             <RemoteVideo key={peerId} stream={stream} label={participantName(peerId)} />
           ))}
 
-          {localScreenStream && (
-            <RemoteVideo stream={localScreenStream} label="Você está compartilhando a tela" muted />
-          )}
-          {Object.entries(remoteScreenStreams).map(([peerId, stream]) => (
+          {screenShares.length === 1 && (
             <RemoteVideo
-              key={peerId}
-              stream={stream}
-              label={`${participantName(peerId)} está compartilhando a tela`}
+              stream={screenShares[0].stream}
+              label={
+                screenShares[0].id === currentUserId
+                  ? 'Você está compartilhando a tela'
+                  : `${screenShares[0].label} está compartilhando a tela`
+              }
+              muted={screenShares[0].id === currentUserId}
             />
-          ))}
+          )}
+          {screenShares.length > 1 && (
+            <ScreenShareGrid shares={screenShares} currentUserId={currentUserId} />
+          )}
 
           {localLiveStream && <RemoteVideo stream={localLiveStream} label="● Você está ao vivo" muted live />}
           {Object.entries(remoteLiveStreams).map(([peerId, stream]) => (
@@ -231,10 +253,11 @@ export function VoicePanel({
 
       {pickerTarget && (
         <ScreenSharePicker
-          onSelect={(sourceId) => {
+          showQuality={pickerTarget === 'screen'}
+          onSelect={(sourceId, quality) => {
             const target = pickerTarget
             setPickerTarget(null)
-            if (target === 'screen') startScreenShare(sourceId)
+            if (target === 'screen') startScreenShare(sourceId, quality)
             else startGoLive(sourceId)
           }}
           onCancel={() => setPickerTarget(null)}
@@ -273,6 +296,59 @@ function VoiceButton({
       {active ? activeLabel : label}
     </button>
   )
+}
+
+// Duas ou mais pessoas compartilhando tela ao mesmo tempo: em vez de
+// empilhar tudo em vídeos gigantes um embaixo do outro, mostra uma só em
+// destaque (grande) e o resto como miniaturas clicáveis — a pessoa escolhe
+// quem fica em evidência, sem perder de vista que as outras também estão
+// compartilhando.
+function ScreenShareGrid({
+  shares,
+  currentUserId
+}: {
+  shares: { id: string; stream: MediaStream; label: string }[]
+  currentUserId: string
+}) {
+  const [focusedId, setFocusedId] = useState<string | null>(null)
+  const focused = shares.find((s) => s.id === focusedId) ?? shares[0]
+
+  return (
+    <div className="w-full max-w-4xl space-y-2">
+      <RemoteVideo
+        stream={focused.stream}
+        label={focused.id === currentUserId ? 'Você está compartilhando a tela' : `${focused.label} está compartilhando a tela`}
+        muted={focused.id === currentUserId}
+      />
+
+      <div className="flex gap-2 overflow-x-auto pb-1">
+        {shares.map((share) => (
+          <button
+            key={share.id}
+            onClick={() => setFocusedId(share.id)}
+            className={`bevel-sm shrink-0 overflow-hidden border transition ${
+              share.id === focused.id ? 'border-volt' : 'border-line hover:border-mist-dim'
+            }`}
+          >
+            <ThumbnailVideo stream={share.stream} muted={share.id === currentUserId} />
+            <p className="w-32 truncate bg-panel-2 px-1.5 py-1 text-left font-mono text-[10px] text-mist-dim">
+              {share.id === currentUserId ? 'Você' : share.label}
+            </p>
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function ThumbnailVideo({ stream, muted }: { stream: MediaStream; muted?: boolean }) {
+  const ref = useRef<HTMLVideoElement>(null)
+
+  useEffect(() => {
+    if (ref.current) ref.current.srcObject = stream
+  }, [stream])
+
+  return <video ref={ref} autoPlay muted={muted} className="h-20 w-32 bg-black object-cover" />
 }
 
 function RemoteAudio({ stream, muted }: { stream: MediaStream; muted?: boolean }) {

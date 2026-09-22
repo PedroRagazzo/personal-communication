@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react'
-import type { ChannelSummary, ServerSummary } from '../services/api'
+import type { ChannelSummary, ServerMember, ServerSummary } from '../services/api'
+import type { VoiceParticipant } from '../stores/voiceStore'
 
 export function ChannelList({
   server,
@@ -7,7 +8,13 @@ export function ChannelList({
   selectedChannelId,
   error,
   onSelect,
-  onCreate
+  onCreate,
+  members,
+  currentUserId,
+  voiceChannelId,
+  voiceStatus,
+  voiceParticipants,
+  speakingUserIds
 }: {
   server: ServerSummary | null
   channels: ChannelSummary[]
@@ -15,6 +22,12 @@ export function ChannelList({
   error: string | null
   onSelect: (id: string) => void
   onCreate: (name: string, type: 'guild_text' | 'guild_voice') => Promise<boolean>
+  members: ServerMember[]
+  currentUserId: string
+  voiceChannelId: string | null
+  voiceStatus: 'idle' | 'connecting' | 'connected'
+  voiceParticipants: VoiceParticipant[]
+  speakingUserIds: Set<string>
 }) {
   const [creating, setCreating] = useState(false)
   const [name, setName] = useState('')
@@ -29,6 +42,11 @@ export function ChannelList({
       setName('')
       setType('guild_text')
     }
+  }
+
+  function participantLabel(userId: string): string {
+    if (userId === currentUserId) return 'Você'
+    return members.find((m) => m.user.id === userId)?.user.username ?? 'desconhecido'
   }
 
   return (
@@ -99,23 +117,63 @@ export function ChannelList({
         )}
         {channels.map((channel) => {
           const active = channel.id === selectedChannelId
+          // Clicar num canal de voz já entra direto (igual Discord) — ver
+          // HomePage.tsx, que decide isso no próprio onSelect. Aqui só
+          // decide o que mostrar: a lista de quem tá conectado aparece
+          // embaixo do canal em que você REALMENTE está (não uma prévia de
+          // canais que você não entrou — isso pediria presença do servidor
+          // pra canais nunca joinados, que esse projeto ainda não expõe).
+          const connectedToThis = channel.type === 'guild_voice' && channel.id === voiceChannelId && voiceStatus === 'connected'
+
           return (
-            <button
-              key={channel.id}
-              onClick={() => onSelect(channel.id)}
-              className={`relative mb-0.5 flex w-full items-center gap-2 py-1.5 pl-3 pr-2 text-left text-sm transition ${
-                active ? 'bg-panel-3 text-mist' : 'text-mist-dim hover:bg-panel-3/50 hover:text-mist'
-              }`}
-            >
-              {active && <span className="absolute left-0 top-1/2 h-3.5 w-0.5 -translate-y-1/2 bg-volt" />}
-              <span className={active ? 'text-volt' : 'text-mist-faint'}>
-                {channel.type === 'guild_voice' ? '🔊' : '#'}
-              </span>
-              <span className="truncate">{channel.name}</span>
-            </button>
+            <div key={channel.id} className="mb-0.5">
+              <button
+                onClick={() => onSelect(channel.id)}
+                className={`relative flex w-full items-center gap-2 py-1.5 pl-3 pr-2 text-left text-sm transition ${
+                  active ? 'bg-panel-3 text-mist' : 'text-mist-dim hover:bg-panel-3/50 hover:text-mist'
+                }`}
+              >
+                {active && <span className="absolute left-0 top-1/2 h-3.5 w-0.5 -translate-y-1/2 bg-volt" />}
+                <span className={active ? 'text-volt' : 'text-mist-faint'}>
+                  {channel.type === 'guild_voice' ? '🔊' : '#'}
+                </span>
+                <span className="truncate">{channel.name}</span>
+              </button>
+
+              {connectedToThis && (
+                <ul className="ml-4 mt-0.5 space-y-0.5 border-l border-line-soft pl-2.5">
+                  {voiceParticipants.map((p) => {
+                    const speaking = !p.muted && speakingUserIds.has(p.userId)
+                    return (
+                      <li key={p.userId} className="flex items-center gap-1.5 py-0.5">
+                        <span
+                          className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-panel-3 font-mono text-[9px] font-bold ${
+                            speaking ? 'text-volt ring-2 ring-volt' : 'text-mist-dim'
+                          }`}
+                        >
+                          {initials(participantLabel(p.userId))}
+                        </span>
+                        <span className={`truncate text-xs ${speaking ? 'text-mist' : 'text-mist-dim'}`}>
+                          {participantLabel(p.userId)}
+                        </span>
+                        {p.muted && (
+                          <span title="Mutado" className="shrink-0 text-[10px] text-plasma">
+                            🔇
+                          </span>
+                        )}
+                      </li>
+                    )
+                  })}
+                </ul>
+              )}
+            </div>
           )
         })}
       </div>
     </aside>
   )
+}
+
+function initials(name: string): string {
+  return name.trim().slice(0, 2).toUpperCase()
 }

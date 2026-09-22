@@ -3,6 +3,13 @@ import { Presence } from 'phoenix'
 import type { Channel } from 'phoenix'
 import { getSocket } from '../services/socket'
 import { MeshManager } from '../webrtc/MeshManager'
+import { SpeakingDetector } from '../webrtc/SpeakingDetector'
+
+export interface ScreenShareQuality {
+  width: number
+  height: number
+  frameRate: number
+}
 
 interface PresenceMeta {
   user_id: string
@@ -23,7 +30,9 @@ interface VoiceState {
   participants: VoiceParticipant[]
   localMuted: boolean
   localDeafened: boolean
+  localAudioStream: MediaStream | null
   remoteAudioStreams: Record<string, MediaStream>
+  speakingUserIds: Set<string>
   screenSharing: boolean
   localScreenStream: MediaStream | null
   remoteScreenStreams: Record<string, MediaStream>
@@ -35,13 +44,14 @@ interface VoiceState {
   leave: () => void
   toggleMute: () => void
   toggleDeafen: () => void
-  startScreenShare: (sourceId: string) => Promise<void>
+  startScreenShare: (sourceId: string, quality: ScreenShareQuality) => Promise<void>
   stopScreenShare: () => void
   toggleVideo: () => Promise<void>
 }
 
 let phoenixChannel: Channel | null = null
 let mesh: MeshManager | null = null
+let speakingDetector: SpeakingDetector | null = null
 
 export const useVoiceStore = create<VoiceState>((set, get) => ({
   status: 'idle',
@@ -49,7 +59,9 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
   participants: [],
   localMuted: false,
   localDeafened: false,
+  localAudioStream: null,
   remoteAudioStreams: {},
+  speakingUserIds: new Set(),
   screenSharing: false,
   localScreenStream: null,
   remoteScreenStreams: {},
@@ -82,6 +94,13 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
 
     const channel = socket.channel(`voice:${channelId}`, {})
 
+    // Indicador de fala de verdade (nível de áudio), não só "não mutado" —
+    // ver webrtc/SpeakingDetector.ts. Observa o mic local desde já; cada
+    // peer remoto entra em onRemoteTrack (áudio) abaixo, assim que a track
+    // chega.
+    const detector = new SpeakingDetector((speaking) => set({ speakingUserIds: speaking }))
+    detector.watch(currentUserId, localStream)
+
     const meshManager = new MeshManager(
       currentUserId,
       (toUserId, event, payload) => {
@@ -96,6 +115,7 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
         // aqui o Presence já reflete o que ela é.
         onRemoteTrack: (peerId, track, stream) => {
           if (track.kind === 'audio') {
+            detector.watch(peerId, stream)
             set((state) => ({ remoteAudioStreams: { ...state.remoteAudioStreams, [peerId]: stream } }))
             return
           }
@@ -122,6 +142,7 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
         },
         onRemoteTrackEnded: (peerId, kind, trackId) => {
           if (kind === 'audio') {
+            detector.unwatch(peerId)
             set((state) => {
               const rest = { ...state.remoteAudioStreams }
               delete rest[peerId]
@@ -145,6 +166,7 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
           })
         },
         onPeerRemoved: (peerId) => {
+          detector.unwatch(peerId)
           set((state) => {
             const audio = { ...state.remoteAudioStreams }
             const screen = { ...state.remoteScreenStreams }
@@ -214,25 +236,31 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
       })
     } catch {
       meshManager.destroy()
+      detector.destroy()
       set({ status: 'idle', channelId: null, error: 'não foi possível entrar no canal de voz' })
       return
     }
 
     mesh = meshManager
     phoenixChannel = channel
-    set({ status: 'connected' })
+    speakingDetector = detector
+    set({ status: 'connected', localAudioStream: localStream })
   },
 
   leave: () => {
     mesh?.destroy()
     mesh = null
+    speakingDetector?.destroy()
+    speakingDetector = null
     phoenixChannel?.leave()
     phoenixChannel = null
     set({
       status: 'idle',
       channelId: null,
       participants: [],
+      localAudioStream: null,
       remoteAudioStreams: {},
+      speakingUserIds: new Set(),
       localMuted: false,
       localDeafened: false,
       screenSharing: false,
@@ -267,7 +295,7 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
     set({ localDeafened: deafened, localMuted: muted })
   },
 
-  startScreenShare: async (sourceId) => {
+  startScreenShare: async (sourceId, quality) => {
     const channel = phoenixChannel
     if (!channel || !mesh) return
     set({ error: null })
@@ -277,8 +305,17 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
     let stream: MediaStream
     try {
       // Dispara o handler de main (setDisplayMediaRequestHandler), que já
-      // sabe qual fonte liberar por causa do selectSource acima.
-      stream = await navigator.mediaDevices.getDisplayMedia({ video: true })
+      // sabe qual fonte liberar por causa do selectSource acima. `ideal`
+      // (não `exact`) pra resolução/fps de propósito — vira um pedido, não
+      // uma trava: uma tela física menor que o pedido (ex.: 1440p pedido
+      // numa tela 1080p) não deve fazer o compartilhamento falhar inteiro.
+      stream = await navigator.mediaDevices.getDisplayMedia({
+        video: {
+          width: { ideal: quality.width },
+          height: { ideal: quality.height },
+          frameRate: { ideal: quality.frameRate }
+        }
+      })
     } catch (err) {
       set({
         error: err instanceof Error ? `compartilhamento de tela: ${err.message}` : 'falha ao capturar a tela'
