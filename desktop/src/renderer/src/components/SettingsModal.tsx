@@ -11,9 +11,11 @@ const METER_MAX = 100
 // / JoinServerDialog.tsx (overlay fixo, clique fora fecha).
 export function SettingsModal({ onClose }: { onClose: () => void }) {
   const mic = useSettingsStore((s) => s.mic)
+  const soundCuesEnabled = useSettingsStore((s) => s.soundCuesEnabled)
   const setEchoCancellation = useSettingsStore((s) => s.setEchoCancellation)
   const setNoiseSuppression = useSettingsStore((s) => s.setNoiseSuppression)
   const setMicSensitivity = useSettingsStore((s) => s.setMicSensitivity)
+  const setSoundCuesEnabled = useSettingsStore((s) => s.setSoundCuesEnabled)
   const applyMicSensitivity = useVoiceStore((s) => s.setMicSensitivity)
   const activeCallStream = useVoiceStore((s) => s.localAudioStream)
 
@@ -86,6 +88,19 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
       >
         <p className="font-mono text-[10px] tracking-[0.25em] text-volt">PREFERÊNCIAS</p>
         <h3 className="mb-4 mt-1 font-display text-lg font-bold text-mist">Configurações</h3>
+
+        <section className="mb-5 space-y-2 border-b border-line-soft pb-5">
+          <h4 className="font-mono text-[10px] tracking-[0.2em] text-mist-dim">GERAL</h4>
+          <Toggle
+            label="Sons de identificação"
+            checked={soundCuesEnabled}
+            onChange={setSoundCuesEnabled}
+          />
+          <p className="text-xs leading-relaxed text-mist-dim">
+            Um bip curto ao entrar/sair de uma call, mutar/desmutar, e quando alguém começa ou para uma
+            transmissão.
+          </p>
+        </section>
 
         <section className="space-y-4">
           <h4 className="font-mono text-[10px] tracking-[0.2em] text-mist-dim">MICROFONE</h4>

@@ -10,6 +10,7 @@ import {
 } from 'livekit-client'
 import { getSocket } from '../services/socket'
 import { useVoiceStore } from './voiceStore'
+import { playLiveStartSound, playLiveStopSound } from '../services/soundCues'
 
 // Go Live (FASE 9 no backend, FASE 11 fatia 10 aqui): diferente de
 // voiceStore.ts, aqui não existe mesh nenhum — mídia vai direto
@@ -172,6 +173,22 @@ export const useGoLiveStore = create<GoLiveState>((set, get) => ({
         userId,
         ...(pres.metas[0] as PresenceMeta)
       }))
+
+      // Som de identificação (v1.5.0, a pedido do usuário) — toca pra
+      // QUALQUER transição real de "ao vivo" nessa sala, incluindo a
+      // própria (funciona como confirmação de "sua transmissão começou",
+      // igual ao som de entrar na call). Comparado ANTES do set() abaixo
+      // (que substitui `participants` pela lista nova) — senão não teria
+      // mais o "antes" pra comparar.
+      const previouslyLive = new Set(get().participants.filter((p) => p.live).map((p) => p.userId))
+      const nowLive = new Set(list.filter((p) => p.live).map((p) => p.userId))
+      for (const userId of nowLive) {
+        if (!previouslyLive.has(userId)) playLiveStartSound()
+      }
+      for (const userId of previouslyLive) {
+        if (!nowLive.has(userId)) playLiveStopSound()
+      }
+
       set((state) => {
         // Quem parou de transmitir sai de "assistindo" também — senão, se
         // essa pessoa for ao vivo de novo mais tarde, o watchStream

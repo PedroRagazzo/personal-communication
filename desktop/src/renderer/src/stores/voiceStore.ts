@@ -5,6 +5,7 @@ import { getSocket } from '../services/socket'
 import { MeshManager } from '../webrtc/MeshManager'
 import { SpeakingDetector } from '../webrtc/SpeakingDetector'
 import { useSettingsStore } from './settingsStore'
+import { playJoinVoiceSound, playLeaveVoiceSound, playMuteSound, playUnmuteSound } from '../services/soundCues'
 
 export interface ScreenShareQuality {
   width: number
@@ -352,9 +353,17 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
     phoenixChannel = channel
     speakingDetector = detector
     set({ status: 'connected', localAudioStream: localStream })
+    playJoinVoiceSound()
   },
 
   leave: () => {
+    // `join()` sempre chama `leave()` primeiro, como reset defensivo — sem
+    // esse `wasActive`, o som de "saiu da call" tocaria toda vez que a
+    // pessoa entrasse pela primeira vez (nunca esteve conectada de
+    // verdade, nada foi "deixado"). Só toca quando havia algo real pra
+    // deixar (conectado ou tentando conectar); trocar de canal ainda soa
+    // como sair+entrar, igual ao Discord.
+    const wasActive = get().status !== 'idle'
     mesh?.destroy()
     mesh = null
     speakingDetector?.destroy()
@@ -384,6 +393,7 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
       localCameraStream: null,
       remoteCameraStreams: {}
     })
+    if (wasActive) playLeaveVoiceSound()
   },
 
   toggleMute: () => {
@@ -396,6 +406,8 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
     mesh?.setMuted(muted)
     phoenixChannel?.push('state:update', { muted, deafened })
     set({ localMuted: muted, localDeafened: deafened })
+    if (muted) playMuteSound()
+    else playUnmuteSound()
   },
 
   toggleDeafen: () => {
