@@ -164,8 +164,29 @@ já renderiza um `<video>` por peer que está compartilhando
 então múltiplas telas simultâneas não precisaram de nenhuma mudança de UI,
 só a remoção do bloqueio no servidor.
 
-**Ainda não implementado (tela)**: áudio do sistema junto com a
-transmissão (nice-to-have já documentado acima).
+**Áudio do sistema junto com a tela (v1.4.0, a pedido do usuário)**: opção
+"Incluir som do PC" no `ScreenSharePicker.tsx` (mesma UI/mecanismo do Go
+Live — `audio: 'loopback'` no Electron, ver "Fluxo do Go Live" abaixo para o
+porquê e a limitação real de hardware encontrada, que se aplica igual
+aqui). A diferença é que aqui a track de áudio precisa entrar no **mesh**,
+não numa conexão SFU única — `MeshManager` ganhou um terceiro slot de
+sender por peer (`screenAudioSender`, ao lado de `cameraSender`/
+`screenSender`), criado preguiçosamente do mesmo jeito que os dois de
+vídeo. `setScreenTrack`/`setScreenAudioTrack` recebem o **mesmo**
+`MediaStream` local (a captura inteira de `getDisplayMedia`, vídeo+áudio
+juntos) — de propósito: isso faz o WebRTC agrupar as duas tracks sob o
+mesmo `msid` do lado de quem envia, e do lado de quem recebe os dois
+`ontrack` chegam com o mesmo `event.streams[0]`, então um único `<video>`
+já toca as duas juntas sem precisar de um `<audio>` separado nem de juntar
+tracks manualmente. Como um peer agora pode ter **duas** tracks de áudio
+(mic, sempre presente, e som da tela, só quando ligado), a metadata de
+Presence ganhou `screen_sharing_audio` — quem recebe usa isso (mais a
+comparação de referência do `MediaStream` já conhecido como mic) pra saber
+que a track nova é som da tela, não o microfone (`voiceStore.ts`,
+`onRemoteTrack`). Mesma trava anti-eco do Go Live (`localPlaybackMuted`)
+entra aqui também — agora é um contador de origens (`screenshare`/
+`golive`) em vez de um bool solto, já que as duas podem estar ativas ao
+mesmo tempo pra uma mesma pessoa.
 
 ## Fluxo de vídeo
 
@@ -271,14 +292,17 @@ simultâneos por sala (ver "Limites do mesh" acima)
 Parar compartilhamento → replaceTrack(null) → sem renegociar de novo
 ```
 
-Nunca passa pelo WebSocket. Áudio do sistema junto com a tela: *nice-to-have* pós-MVP (suporte varia por SO).
+Nunca passa pelo WebSocket. Áudio do sistema junto com a tela: implementado
+(v1.4.0, ver acima) — mesma track de vídeo acima, mais um sender de áudio
+preguiçoso no mesh.
 
 **Implementado (lado servidor)**: `screen_share:start`/`screen_share:stop` no
-mesmo `VoiceChannel`, com metadata `screen_sharing` no Presence — sempre
-respondem `:ok`, sem checagem de exclusividade (removida pós-fatia-6 da
-FASE 11, ver "Limites do mesh" acima). A parte client-side (captura de
-verdade, `desktopCapturer`, renegociação) está implementada desde a FASE
-11 fatia 5.
+mesmo `VoiceChannel`, com metadata `screen_sharing`/`screen_sharing_audio`
+no Presence — sempre respondem `:ok`, sem checagem de exclusividade
+(removida pós-fatia-6 da FASE 11, ver "Limites do mesh" acima).
+`screen_share:start` aceita um `include_audio` opcional (default `false`,
+v1.4.0). A parte client-side (captura de verdade, `desktopCapturer`,
+renegociação) está implementada desde a FASE 11 fatia 5.
 
 ## Fluxo do Go Live (FASE 9)
 

@@ -33,6 +33,13 @@ defmodule ToraDosBurroWeb.VoiceChannel do
   compartilhamento simultâneo é mais uma track de vídeo que todo mundo na
   chamada precisa decodificar (mesh, não SFU); diferente do vídeo, que
   mantém `@max_video_participants` por esse exato motivo.
+
+  Tela com som do PC (v1.4.0, a pedido do usuário): `screen_share:start`
+  aceita um `include_audio` opcional (default `false`), guardado também no
+  Presence (`screen_sharing_audio`) — é o que permite quem recebe a track de
+  áudio extra dessa pessoa (câmera/mic já manda uma sempre) saber que ela é
+  som da tela, não o microfone, sem precisar inspecionar a track em si (ver
+  `MeshManager.setScreenAudioTrack` e a desambiguação em `voiceStore.ts`).
   """
 
   use ToraDosBurroWeb, :channel
@@ -71,6 +78,7 @@ defmodule ToraDosBurroWeb.VoiceChannel do
         deafened: false,
         video: false,
         screen_sharing: false,
+        screen_sharing_audio: false,
         joined_at: System.system_time(:second)
       })
 
@@ -124,15 +132,30 @@ defmodule ToraDosBurroWeb.VoiceChannel do
     {:reply, :ok, socket}
   end
 
-  def handle_in("screen_share:start", _params, socket) do
+  def handle_in("screen_share:start", params, socket) do
     user_id = socket.assigns.current_user.id
-    {:ok, _} = Presence.update(socket, user_id, &Map.put(&1, :screen_sharing, true))
+    include_audio = Map.get(params, "include_audio", false)
+
+    {:ok, _} =
+      Presence.update(
+        socket,
+        user_id,
+        &Map.merge(&1, %{screen_sharing: true, screen_sharing_audio: include_audio})
+      )
+
     {:reply, :ok, socket}
   end
 
   def handle_in("screen_share:stop", _params, socket) do
     user_id = socket.assigns.current_user.id
-    {:ok, _} = Presence.update(socket, user_id, &Map.put(&1, :screen_sharing, false))
+
+    {:ok, _} =
+      Presence.update(
+        socket,
+        user_id,
+        &Map.merge(&1, %{screen_sharing: false, screen_sharing_audio: false})
+      )
+
     {:reply, :ok, socket}
   end
 

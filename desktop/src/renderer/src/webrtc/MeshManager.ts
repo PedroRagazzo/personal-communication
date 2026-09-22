@@ -50,6 +50,7 @@ interface PeerEntry {
   pendingCandidates: RTCIceCandidateInit[]
   cameraSender: RTCRtpSender | null
   screenSender: RTCRtpSender | null
+  screenAudioSender: RTCRtpSender | null
 }
 
 export class MeshManager {
@@ -57,6 +58,7 @@ export class MeshManager {
   private localStream: MediaStream | null = null
   private cameraStream: MediaStream | null = null
   private screenStream: MediaStream | null = null
+  private screenAudioStream: MediaStream | null = null
   // STUN público sozinho falha atrás de NAT simétrico/restritivo — TURN
   // (docker/coturn) entra como fallback assim que o backend devolve
   // credenciais efêmeras no join de voice:{id} (ver voiceStore.ts). Peers
@@ -90,25 +92,45 @@ export class MeshManager {
   setCameraTrack(stream: MediaStream | null): void {
     this.cameraStream?.getTracks().forEach((track) => track.stop())
     this.cameraStream = stream
-    this.applyVideoSlot('cameraSender', stream)
+    this.applyTrackSlot('cameraSender', stream, stream?.getVideoTracks()[0] ?? null)
   }
 
   setScreenTrack(stream: MediaStream | null): void {
     this.screenStream?.getTracks().forEach((track) => track.stop())
     this.screenStream = stream
-    this.applyVideoSlot('screenSender', stream)
+    this.applyTrackSlot('screenSender', stream, stream?.getVideoTracks()[0] ?? null)
   }
 
-  private applyVideoSlot(slot: 'cameraSender' | 'screenSender', stream: MediaStream | null): void {
-    const track = stream?.getVideoTracks()[0] ?? null
+  // Som do PC junto da tela (v1.4.0, a pedido do usuário) — mesmo padrão de
+  // sender preguiçoso das outras duas tracks de vídeo (ver comentário no
+  // topo do arquivo), só que pra áudio. `stream` aqui é o MESMO objeto
+  // passado pra setScreenTrack (a captura inteira de getDisplayMedia, vídeo
+  // + áudio juntos) — de propósito: assim os dois `addTrack` do lado de
+  // quem envia usam o mesmo MediaStream local, o que faz o WebRTC agrupar
+  // as duas tracks sob o mesmo msid, e do lado de quem recebe os dois
+  // `ontrack` chegam com o MESMO `event.streams[0]` — um único <video>
+  // (RemoteVideo) já toca as duas juntas, sem precisar de um <audio>
+  // separado nem de juntar tracks manualmente (voiceStore.ts só desambigua
+  // QUAL dicionário usar, não precisa remontar o MediaStream).
+  setScreenAudioTrack(stream: MediaStream | null): void {
+    this.screenAudioStream?.getTracks().forEach((track) => track.stop())
+    this.screenAudioStream = stream
+    this.applyTrackSlot('screenAudioSender', stream, stream?.getAudioTracks()[0] ?? null)
+  }
+
+  private applyTrackSlot(
+    slot: 'cameraSender' | 'screenSender' | 'screenAudioSender',
+    stream: MediaStream | null,
+    track: MediaStreamTrack | null
+  ): void {
     for (const entry of this.peers.values()) {
       const sender = entry[slot]
       if (sender) {
         // Já existe (negociado antes) — trocar não renegocia.
         sender.replaceTrack(track)
       } else if (track) {
-        // Primeira vez que essa pessoa liga câmera/tela nessa chamada —
-        // única vez que isso renegocia de verdade.
+        // Primeira vez que essa pessoa liga câmera/tela/som-da-tela nessa
+        // chamada — única vez que isso renegocia de verdade.
         entry[slot] = entry.connection.addTrack(track, stream as MediaStream)
       }
     }
@@ -128,7 +150,8 @@ export class MeshManager {
       ignoreOffer: false,
       pendingCandidates: [],
       cameraSender: null,
-      screenSender: null
+      screenSender: null,
+      screenAudioSender: null
     }
     this.peers.set(peerId, entry)
 
@@ -177,6 +200,12 @@ export class MeshManager {
     }
     if (this.screenStream) {
       entry.screenSender = connection.addTrack(this.screenStream.getVideoTracks()[0], this.screenStream)
+    }
+    if (this.screenAudioStream) {
+      entry.screenAudioSender = connection.addTrack(
+        this.screenAudioStream.getAudioTracks()[0],
+        this.screenAudioStream
+      )
     }
   }
 
@@ -237,6 +266,8 @@ export class MeshManager {
     this.cameraStream = null
     this.screenStream?.getTracks().forEach((track) => track.stop())
     this.screenStream = null
+    this.screenAudioStream?.getTracks().forEach((track) => track.stop())
+    this.screenAudioStream = null
   }
 
   private attachLocalTracks(connection: RTCPeerConnection): void {

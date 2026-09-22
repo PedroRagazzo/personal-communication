@@ -50,6 +50,12 @@ interface GoLiveState {
   // aplicado) — diferente de `participants.filter(p => p.live)`, que é só
   // quem ESTÁ transmitindo, watchable ou não.
   watchingUserIds: Set<string>
+  // Volume (0–2) por transmissão, ajustado pelo menu de botão direito em
+  // VoicePanel.tsx — sem entrada pra um id = 100%. Não é limpo em
+  // stopWatchingStream de propósito (preferência da sessão, não algo que
+  // deveria voltar ao padrão só por sair e entrar de novo na mesma
+  // transmissão), só em leave().
+  remoteVolumes: Record<string, number>
   error: string | null
   join: (channelId: string) => Promise<void>
   leave: () => void
@@ -57,6 +63,7 @@ interface GoLiveState {
   stopGoLive: () => void
   watchStream: (peerId: string) => void
   stopWatchingStream: (peerId: string) => void
+  setRemoteVolume: (peerId: string, volume: number) => void
 }
 
 let phoenixChannel: Channel | null = null
@@ -70,6 +77,7 @@ export const useGoLiveStore = create<GoLiveState>((set, get) => ({
   localStream: null,
   remoteStreams: {},
   watchingUserIds: new Set(),
+  remoteVolumes: {},
   error: null,
 
   join: async (channelId) => {
@@ -192,8 +200,8 @@ export const useGoLiveStore = create<GoLiveState>((set, get) => ({
     phoenixChannel = null
     // Defensivo — se saiu do canal ainda transmitindo, sem isso a pessoa
     // ficaria com a própria voz dos outros mudo pra sempre (ver
-    // localPlaybackMuted em voiceStore.ts).
-    useVoiceStore.getState().setLocalPlaybackMuted(false)
+    // localPlaybackMuted/activeSystemAudioSources em voiceStore.ts).
+    useVoiceStore.getState().removeSystemAudioSource('golive')
     set({
       status: 'idle',
       channelId: null,
@@ -202,6 +210,7 @@ export const useGoLiveStore = create<GoLiveState>((set, get) => ({
       localStream: null,
       remoteStreams: {},
       watchingUserIds: new Set(),
+      remoteVolumes: {},
       error: null
     })
   },
@@ -304,7 +313,7 @@ export const useGoLiveStore = create<GoLiveState>((set, get) => ({
     // antigos; quem eu ainda quiser assistir volta sozinho via
     // TrackPublished + watchingUserIds já preservado.
     const audioIncluded = includeSystemAudio && !audioCaptureFailed
-    if (audioIncluded) useVoiceStore.getState().setLocalPlaybackMuted(true)
+    if (audioIncluded) useVoiceStore.getState().addSystemAudioSource('golive')
     set({
       isLive: true,
       localStream: stream,
@@ -325,7 +334,14 @@ export const useGoLiveStore = create<GoLiveState>((set, get) => ({
     }
     stream?.getTracks().forEach((t) => t.stop())
     phoenixChannel?.push('golive:stop', {})
-    useVoiceStore.getState().setLocalPlaybackMuted(false)
+    useVoiceStore.getState().removeSystemAudioSource('golive')
     set({ isLive: false, localStream: null })
+  },
+
+  // Botão direito numa transmissão (VoicePanel.tsx) — só reprodução local,
+  // mesmo princípio do setRemoteMicVolume/setRemoteScreenVolume em
+  // voiceStore.ts.
+  setRemoteVolume: (peerId, volume) => {
+    set((state) => ({ remoteVolumes: { ...state.remoteVolumes, [peerId]: volume } }))
   }
 }))

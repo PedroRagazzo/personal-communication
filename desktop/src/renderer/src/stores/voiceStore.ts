@@ -18,12 +18,18 @@ interface PresenceMeta {
   deafened: boolean
   video: boolean
   screen_sharing: boolean
+  // v1.4.0 — diz pra quem recebe se a track de áudio extra dessa pessoa
+  // (além do mic, que já manda uma sempre) é som do PC compartilhado junto
+  // da tela, não o microfone. Ver a desambiguação em onRemoteTrack abaixo.
+  screen_sharing_audio: boolean
   joined_at: number
 }
 
 export interface VoiceParticipant extends PresenceMeta {
   userId: string
 }
+
+type SystemAudioSource = 'screenshare' | 'golive'
 
 interface VoiceState {
   status: 'idle' | 'connecting' | 'connected'
@@ -32,18 +38,34 @@ interface VoiceState {
   localMuted: boolean
   localDeafened: boolean
   // Sem relação com mute/deafen (que também mexem no mic) — só reprodução
-  // local. Ligado pelo goLiveStore enquanto a pessoa transmite a própria
-  // tela COM som do PC (ver startGoLive): sem isso, o áudio de voz que o
-  // app está tocando pelos alto-falantes entraria na captura de loopback
-  // do sistema e voltaria pra quem está assistindo — inclusive pra quem
-  // já ouve a mesma voz ao vivo pela chamada, um eco duplicado.
+  // local. Ligado enquanto QUALQUER captura de som do PC estiver ativa —
+  // Go Live (goLiveStore.startGoLive) ou a própria tela compartilhada aqui
+  // (startScreenShare, v1.4.0): sem isso, o áudio de voz que o app está
+  // tocando pelos alto-falantes entraria na captura de loopback do sistema
+  // e voltaria pra quem está assistindo — inclusive pra quem já ouve a
+  // mesma voz ao vivo pela chamada, um eco duplicado. Derivado de
+  // `activeSystemAudioSources` (module-level, abaixo) em vez de um bool
+  // solto — as duas fontes podem estar ativas ao mesmo tempo (transmitindo
+  // Go Live E compartilhando tela com som), e só faz sentido desmutar
+  // quando a ÚLTIMA delas parar, não a primeira.
   localPlaybackMuted: boolean
   localAudioStream: MediaStream | null
   remoteAudioStreams: Record<string, MediaStream>
+  // Volume (0–2, ou seja 0–200%) por pessoa — mic remoto e tela remota,
+  // ajustado pelo menu de botão direito em VoicePanel.tsx. Sem entrada pra
+  // um id = 100% (padrão). Não é resetado por watch/unwatch, só em leave() —
+  // é uma preferência da sessão, não algo que deveria voltar ao padrão só
+  // porque a pessoa parou e voltou a compartilhar a tela.
+  remoteMicVolumes: Record<string, number>
+  remoteScreenVolumes: Record<string, number>
   speakingUserIds: Set<string>
   screenSharing: boolean
   localScreenStream: MediaStream | null
   screenShareQuality: ScreenShareQuality | null
+  // Preservado separado da própria track de áudio porque
+  // updateScreenShareQuality recaptura a fonte (nova getDisplayMedia) e
+  // precisa saber se deve pedir som de novo.
+  screenShareIncludesAudio: boolean
   remoteScreenStreams: Record<string, MediaStream>
   videoEnabled: boolean
   localCameraStream: MediaStream | null
@@ -53,12 +75,18 @@ interface VoiceState {
   leave: () => void
   toggleMute: () => void
   toggleDeafen: () => void
-  startScreenShare: (sourceId: string, quality: ScreenShareQuality) => Promise<void>
+  startScreenShare: (sourceId: string, quality: ScreenShareQuality, includeAudio: boolean) => Promise<void>
   updateScreenShareQuality: (quality: ScreenShareQuality) => Promise<void>
   stopScreenShare: () => void
   toggleVideo: () => Promise<void>
   setMicSensitivity: (value: number) => void
-  setLocalPlaybackMuted: (muted: boolean) => void
+  setRemoteMicVolume: (peerId: string, volume: number) => void
+  setRemoteScreenVolume: (peerId: string, volume: number) => void
+  // Chamadas pelo goLiveStore e por essa própria store (startScreenShare/
+  // stopScreenShare) — ver o comentário de `localPlaybackMuted` acima e de
+  // `activeSystemAudioSources` abaixo.
+  addSystemAudioSource: (source: SystemAudioSource) => void
+  removeSystemAudioSource: (source: SystemAudioSource) => void
 }
 
 let phoenixChannel: Channel | null = null
@@ -70,6 +98,10 @@ let speakingDetector: SpeakingDetector | null = null
 // `pendingScreenSourceId` a cada chamada (main/index.ts), então cada
 // recaptura precisa chamar selectSource de novo com o mesmo id.
 let lastScreenSourceId: string | null = null
+// Quem está ativamente capturando som do sistema agora (ver
+// localPlaybackMuted acima) — contador por origem, não um bool: só desmuta
+// a reprodução local quando o conjunto fica vazio.
+const activeSystemAudioSources = new Set<SystemAudioSource>()
 
 export const useVoiceStore = create<VoiceState>((set, get) => ({
   status: 'idle',
@@ -80,10 +112,13 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
   localPlaybackMuted: false,
   localAudioStream: null,
   remoteAudioStreams: {},
+  remoteMicVolumes: {},
+  remoteScreenVolumes: {},
   speakingUserIds: new Set(),
   screenSharing: false,
   localScreenStream: null,
   screenShareQuality: null,
+  screenShareIncludesAudio: false,
   remoteScreenStreams: {},
   videoEnabled: false,
   localCameraStream: null,
@@ -149,8 +184,35 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
         // aqui o Presence já reflete o que ela é.
         onRemoteTrack: (peerId, track, stream) => {
           if (track.kind === 'audio') {
+            // v1.4.0: agora existem duas origens possíveis de áudio por
+            // peer — o mic (sempre presente desde o início da chamada) e o
+            // som da tela compartilhada (só chega bem depois, se/quando a
+            // pessoa ligar "com áudio" — MeshManager.setScreenAudioTrack
+            // usa o MESMO MediaStream local da track de vídeo da tela, então
+            // aqui as duas chegam como o MESMO objeto `stream` já usado em
+            // remoteScreenStreams[peerId], se o vídeo já tiver chegado antes
+            // — daí o primeiro teste abaixo). Se ainda não deu tempo (áudio
+            // chegando antes do vídeo), cai pro Presence, igual à
+            // desambiguação de vídeo logo adiante.
+            const state = get()
+            const participant = state.participants.find((p) => p.userId === peerId)
+            // O mic já existe desde o início da chamada, bem antes de
+            // alguém poder ligar "som da tela" — por isso o teste de
+            // fallback compara contra a REFERÊNCIA do stream do mic já
+            // conhecido (não só "existe algum"), senão o caso mais comum
+            // (mic já conectado, som da tela chega depois) cairia no `!`
+            // (mic existe) e classificaria errado.
+            const isScreenAudio =
+              state.remoteScreenStreams[peerId] === stream ||
+              (participant?.screen_sharing_audio && state.remoteAudioStreams[peerId] !== stream)
+
+            if (isScreenAudio) {
+              set((s) => ({ remoteScreenStreams: { ...s.remoteScreenStreams, [peerId]: stream } }))
+              return
+            }
+
             detector.watch(peerId, stream)
-            set((state) => ({ remoteAudioStreams: { ...state.remoteAudioStreams, [peerId]: stream } }))
+            set((s) => ({ remoteAudioStreams: { ...s.remoteAudioStreams, [peerId]: stream } }))
             return
           }
 
@@ -176,11 +238,22 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
         },
         onRemoteTrackEnded: (peerId, kind, trackId) => {
           if (kind === 'audio') {
-            detector.unwatch(peerId)
             set((state) => {
-              const rest = { ...state.remoteAudioStreams }
-              delete rest[peerId]
-              return { remoteAudioStreams: rest }
+              const screenStream = state.remoteScreenStreams[peerId]
+              const screenAudioTrack = screenStream?.getAudioTracks().find((t) => t.id === trackId)
+              if (screenAudioTrack) {
+                // Só o áudio da tela terminou — a track de vídeo (se ainda
+                // ativa) continua no mesmo MediaStream normalmente.
+                screenStream.removeTrack(screenAudioTrack)
+                return { remoteScreenStreams: { ...state.remoteScreenStreams } }
+              }
+              if (state.remoteAudioStreams[peerId]?.getTracks().some((t) => t.id === trackId)) {
+                detector.unwatch(peerId)
+                const rest = { ...state.remoteAudioStreams }
+                delete rest[peerId]
+                return { remoteAudioStreams: rest }
+              }
+              return {}
             })
             return
           }
@@ -289,12 +362,15 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
     phoenixChannel?.leave()
     phoenixChannel = null
     lastScreenSourceId = null
+    activeSystemAudioSources.clear()
     set({
       status: 'idle',
       channelId: null,
       participants: [],
       localAudioStream: null,
       remoteAudioStreams: {},
+      remoteMicVolumes: {},
+      remoteScreenVolumes: {},
       speakingUserIds: new Set(),
       localMuted: false,
       localDeafened: false,
@@ -302,6 +378,7 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
       screenSharing: false,
       localScreenStream: null,
       screenShareQuality: null,
+      screenShareIncludesAudio: false,
       remoteScreenStreams: {},
       videoEnabled: false,
       localCameraStream: null,
@@ -332,14 +409,15 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
     set({ localDeafened: deafened, localMuted: muted })
   },
 
-  startScreenShare: async (sourceId, quality) => {
+  startScreenShare: async (sourceId, quality, includeAudio) => {
     const channel = phoenixChannel
     if (!channel || !mesh) return
     set({ error: null })
 
-    await window.api.screenShare.selectSource(sourceId)
+    await window.api.screenShare.selectSource(sourceId, includeAudio)
 
     let stream: MediaStream
+    let audioCaptureFailed = false
     try {
       // Dispara o handler de main (setDisplayMediaRequestHandler), que já
       // sabe qual fonte liberar por causa do selectSource acima. `ideal`
@@ -351,14 +429,44 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
           width: { ideal: quality.width },
           height: { ideal: quality.height },
           frameRate: { ideal: quality.frameRate }
-        }
+        },
+        audio: includeAudio
       })
     } catch (err) {
-      set({
-        error: err instanceof Error ? `compartilhamento de tela: ${err.message}` : 'falha ao capturar a tela'
-      })
-      return
+      if (!includeAudio) {
+        set({
+          error:
+            err instanceof Error ? `compartilhamento de tela: ${err.message}` : 'falha ao capturar a tela'
+        })
+        return
+      }
+      // Mesma limitação de hardware documentada no Go Live (goLiveStore.ts,
+      // startGoLive) — loopback de áudio do Windows falha (NotReadableError)
+      // em algumas placas/dispositivos de áudio USB/sem fio. Em vez de
+      // travar o compartilhamento inteiro por causa só do som, tenta de
+      // novo sem pedir áudio.
+      await window.api.screenShare.selectSource(sourceId, false)
+      try {
+        stream = await navigator.mediaDevices.getDisplayMedia({
+          video: {
+            width: { ideal: quality.width },
+            height: { ideal: quality.height },
+            frameRate: { ideal: quality.frameRate }
+          }
+        })
+        audioCaptureFailed = true
+      } catch (videoErr) {
+        set({
+          error:
+            videoErr instanceof Error
+              ? `compartilhamento de tela: ${videoErr.message}`
+              : 'falha ao capturar a tela'
+        })
+        return
+      }
     }
+
+    const audioIncluded = includeAudio && !audioCaptureFailed
 
     // Sem limite de compartilhamentos simultâneos por sala (servidor único,
     // ~20 pessoas, não público) — `screen_share:start` sempre responde ok,
@@ -366,7 +474,7 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
     // erro genérico de canal (rede caiu, etc.).
     const ok = await new Promise<boolean>((resolve) => {
       channel
-        .push('screen_share:start', {})
+        .push('screen_share:start', { include_audio: audioIncluded })
         .receive('ok', () => resolve(true))
         .receive('error', () => resolve(false))
     })
@@ -378,12 +486,22 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
     }
 
     mesh.setScreenTrack(stream)
+    mesh.setScreenAudioTrack(audioIncluded ? stream : null)
     const track = stream.getVideoTracks()[0]
     if (track) {
       track.onended = () => get().stopScreenShare()
     }
     lastScreenSourceId = sourceId
-    set({ screenSharing: true, localScreenStream: stream, screenShareQuality: quality })
+    if (audioIncluded) get().addSystemAudioSource('screenshare')
+    set({
+      screenSharing: true,
+      localScreenStream: stream,
+      screenShareQuality: quality,
+      screenShareIncludesAudio: audioIncluded,
+      error: audioCaptureFailed
+        ? 'não foi possível capturar o som do PC nesse dispositivo de áudio — compartilhando só a tela'
+        : null
+    })
   },
 
   // Muda resolução/fps já transmitindo: recaptura a MESMA fonte (guardada
@@ -397,6 +515,8 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
     if (!get().screenSharing || !mesh || !lastScreenSourceId || !current) return
     set({ error: null })
 
+    const includeAudio = get().screenShareIncludesAudio
+
     // Para a captura atual ANTES de pedir a nova — testado ao vivo: se a
     // antiga ainda está viva no momento do getDisplayMedia, o Chromium
     // reaproveita a sessão de captura já em andamento pra essa mesma fonte
@@ -405,43 +525,87 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
     // vídeo de verdade nunca mudava de qualidade pro peer remoto).
     current.getTracks().forEach((track) => track.stop())
 
-    await window.api.screenShare.selectSource(lastScreenSourceId)
+    await window.api.screenShare.selectSource(lastScreenSourceId, includeAudio)
 
     let stream: MediaStream
+    let audioCaptureFailed = false
     try {
       stream = await navigator.mediaDevices.getDisplayMedia({
         video: {
           width: { ideal: quality.width },
           height: { ideal: quality.height },
           frameRate: { ideal: quality.frameRate }
-        }
+        },
+        audio: includeAudio
       })
     } catch (err) {
-      // A captura antiga já foi parada acima — não tem como manter o
-      // compartilhamento anterior rodando, então encerra de vez (mesma
-      // limpeza de stopScreenShare, inclusive avisando o servidor) em vez
-      // de deixar um estado "compartilhando" com uma track morta.
-      get().stopScreenShare()
-      set({
-        error:
-          err instanceof Error ? `qualidade da tela: ${err.message}` : 'falha ao mudar a qualidade da tela'
-      })
-      return
+      if (!includeAudio) {
+        // A captura antiga já foi parada acima — não tem como manter o
+        // compartilhamento anterior rodando, então encerra de vez (mesma
+        // limpeza de stopScreenShare, inclusive avisando o servidor) em vez
+        // de deixar um estado "compartilhando" com uma track morta.
+        get().stopScreenShare()
+        set({
+          error:
+            err instanceof Error ? `qualidade da tela: ${err.message}` : 'falha ao mudar a qualidade da tela'
+        })
+        return
+      }
+      // Mesma limitação de hardware do startScreenShare/Go Live — tenta de
+      // novo só com vídeo em vez de derrubar o compartilhamento inteiro.
+      await window.api.screenShare.selectSource(lastScreenSourceId, false)
+      try {
+        stream = await navigator.mediaDevices.getDisplayMedia({
+          video: {
+            width: { ideal: quality.width },
+            height: { ideal: quality.height },
+            frameRate: { ideal: quality.frameRate }
+          }
+        })
+        audioCaptureFailed = true
+      } catch (videoErr) {
+        get().stopScreenShare()
+        set({
+          error:
+            videoErr instanceof Error
+              ? `qualidade da tela: ${videoErr.message}`
+              : 'falha ao mudar a qualidade da tela'
+        })
+        return
+      }
     }
 
+    const audioIncluded = includeAudio && !audioCaptureFailed
     mesh.setScreenTrack(stream)
+    mesh.setScreenAudioTrack(audioIncluded ? stream : null)
+    if (includeAudio && !audioIncluded) get().removeSystemAudioSource('screenshare')
+
     const track = stream.getVideoTracks()[0]
     if (track) {
       track.onended = () => get().stopScreenShare()
     }
-    set({ localScreenStream: stream, screenShareQuality: quality })
+    set({
+      localScreenStream: stream,
+      screenShareQuality: quality,
+      screenShareIncludesAudio: audioIncluded,
+      error: audioCaptureFailed
+        ? 'não foi possível manter o som do PC nessa qualidade — continuando só com a tela'
+        : null
+    })
   },
 
   stopScreenShare: () => {
     mesh?.setScreenTrack(null)
+    mesh?.setScreenAudioTrack(null)
+    if (get().screenShareIncludesAudio) get().removeSystemAudioSource('screenshare')
     phoenixChannel?.push('screen_share:stop', {})
     lastScreenSourceId = null
-    set({ screenSharing: false, localScreenStream: null, screenShareQuality: null })
+    set({
+      screenSharing: false,
+      localScreenStream: null,
+      screenShareQuality: null,
+      screenShareIncludesAudio: false
+    })
   },
 
   toggleVideo: async () => {
@@ -499,9 +663,30 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
     speakingDetector?.setThreshold(value)
   },
 
-  // Chamado pelo goLiveStore, não por UI direta — ver o comentário de
-  // `localPlaybackMuted` na interface acima.
-  setLocalPlaybackMuted: (muted) => {
-    set({ localPlaybackMuted: muted })
+  // Botão direito num participante da call (VoicePanel.tsx) — só afeta a
+  // reprodução local do RemoteAudio dessa pessoa, nunca o que ela manda de
+  // verdade (não existe "volume de envio" no WebRTC, só o que cada ouvinte
+  // escolhe localmente).
+  setRemoteMicVolume: (peerId, volume) => {
+    set((state) => ({ remoteMicVolumes: { ...state.remoteMicVolumes, [peerId]: volume } }))
+  },
+
+  // Idem, mas pro som de uma tela compartilhada remota.
+  setRemoteScreenVolume: (peerId, volume) => {
+    set((state) => ({ remoteScreenVolumes: { ...state.remoteScreenVolumes, [peerId]: volume } }))
+  },
+
+  // Chamadas pelo goLiveStore (Go Live) e por essa própria store (tela com
+  // som) — ver o comentário de `localPlaybackMuted`/`activeSystemAudioSources`
+  // acima. Um Set em vez de um bool porque as duas origens podem estar
+  // ativas ao mesmo tempo.
+  addSystemAudioSource: (source) => {
+    activeSystemAudioSources.add(source)
+    set({ localPlaybackMuted: true })
+  },
+
+  removeSystemAudioSource: (source) => {
+    activeSystemAudioSources.delete(source)
+    set({ localPlaybackMuted: activeSystemAudioSources.size > 0 })
   }
 }))

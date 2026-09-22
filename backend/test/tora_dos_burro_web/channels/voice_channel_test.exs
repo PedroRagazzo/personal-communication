@@ -320,6 +320,44 @@ defmodule ToraDosBurroWeb.VoiceChannelTest do
       assert_reply ref2, :ok
     end
 
+    test "compartilhar com include_audio marca screen_sharing_audio na presença", %{
+      owner: owner,
+      other: other,
+      voice_channel: channel
+    } do
+      owner_id = owner.id
+
+      owner_socket = connect_as(owner)
+      {:ok, _, owner_voice} = subscribe_and_join(owner_socket, "voice:#{channel.id}", %{})
+
+      other_socket = connect_as(other)
+      {:ok, _, _other_voice} = subscribe_and_join(other_socket, "voice:#{channel.id}", %{})
+
+      ref = push(owner_voice, "screen_share:start", %{"include_audio" => true})
+      assert_reply ref, :ok
+
+      assert_broadcast "presence_diff",
+                       %{
+                         joins: %{
+                           ^owner_id => %{
+                             metas: [%{screen_sharing: true, screen_sharing_audio: true}]
+                           }
+                         }
+                       }
+
+      ref2 = push(owner_voice, "screen_share:stop", %{})
+      assert_reply ref2, :ok
+
+      assert_broadcast "presence_diff",
+                       %{
+                         joins: %{
+                           ^owner_id => %{
+                             metas: [%{screen_sharing: false, screen_sharing_audio: false}]
+                           }
+                         }
+                       }
+    end
+
     test "parar de compartilhar atualiza a presença sem afetar quem mais está compartilhando", %{
       owner: owner,
       other: other,
