@@ -12,7 +12,10 @@
 // verdade (o quanto a onda se afasta do centro) independente de quantas
 // frequências o som ocupa — funciona igual pra um tom puro ou pra voz real
 // (que tem energia espalhada por muitos harmônicos).
-const SPEAKING_THRESHOLD = 6
+// Exportado: valor padrão de sensibilidade usado tanto aqui quanto no
+// settingsStore.ts (configurável por usuário, ver components/SettingsModal.tsx)
+// — um só lugar de verdade pro "6" original, em vez de duplicar o número.
+export const SPEAKING_THRESHOLD = 6
 const SAMPLE_INTERVAL_MS = 100
 const HOLD_MS = 400
 
@@ -27,9 +30,21 @@ export class SpeakingDetector {
   private audioContext: AudioContext
   private entries = new Map<string, WatchEntry>()
   private timer: ReturnType<typeof setInterval> | null = null
+  private threshold: number
 
-  constructor(private readonly onChange: (speakingIds: Set<string>) => void) {
+  constructor(
+    private readonly onChange: (speakingIds: Set<string>) => void,
+    initialThreshold: number = SPEAKING_THRESHOLD
+  ) {
     this.audioContext = new AudioContext()
+    this.threshold = initialThreshold
+  }
+
+  // Ajuste ao vivo (configurações → sensibilidade do microfone) — não
+  // precisa recriar o detector nem reconectar nada, o próximo sample() já
+  // usa o valor novo.
+  setThreshold(value: number): void {
+    this.threshold = value
   }
 
   watch(id: string, stream: MediaStream): void {
@@ -77,7 +92,7 @@ export class SpeakingDetector {
       }
       const rms = Math.sqrt(sumSquares / entry.buffer.length)
 
-      if (rms > SPEAKING_THRESHOLD) entry.lastAboveAt = now
+      if (rms > this.threshold) entry.lastAboveAt = now
       if (now - entry.lastAboveAt < HOLD_MS) speaking.add(id)
     }
 

@@ -4,6 +4,7 @@ import type { Channel } from 'phoenix'
 import { getSocket } from '../services/socket'
 import { MeshManager } from '../webrtc/MeshManager'
 import { SpeakingDetector } from '../webrtc/SpeakingDetector'
+import { useSettingsStore } from './settingsStore'
 
 export interface ScreenShareQuality {
   width: number
@@ -49,6 +50,7 @@ interface VoiceState {
   updateScreenShareQuality: (quality: ScreenShareQuality) => Promise<void>
   stopScreenShare: () => void
   toggleVideo: () => Promise<void>
+  setMicSensitivity: (value: number) => void
 }
 
 let phoenixChannel: Channel | null = null
@@ -89,9 +91,20 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
       return
     }
 
+    // Cancelamento de eco/ruído são constraints de captura (Configurações →
+    // Microfone, ver settingsStore.ts) — lidas aqui uma vez, no momento de
+    // entrar; ajustar depois de já estar na chamada usa applyConstraints()
+    // direto na track (SettingsModal.tsx), sem precisar recapturar nem
+    // reentrar no canal.
+    const micSettings = useSettingsStore.getState().mic
     let localStream: MediaStream
     try {
-      localStream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      localStream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: micSettings.echoCancellation,
+          noiseSuppression: micSettings.noiseSuppression
+        }
+      })
     } catch (err) {
       set({
         status: 'idle',
@@ -107,7 +120,10 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
     // ver webrtc/SpeakingDetector.ts. Observa o mic local desde já; cada
     // peer remoto entra em onRemoteTrack (áudio) abaixo, assim que a track
     // chega.
-    const detector = new SpeakingDetector((speaking) => set({ speakingUserIds: speaking }))
+    const detector = new SpeakingDetector(
+      (speaking) => set({ speakingUserIds: speaking }),
+      micSettings.micSensitivity
+    )
     detector.watch(currentUserId, localStream)
 
     const meshManager = new MeshManager(
@@ -462,5 +478,14 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
 
     mesh.setCameraTrack(stream)
     set({ videoEnabled: true, localCameraStream: stream })
+  },
+
+  // O SpeakingDetector é privado desse módulo (variável `speakingDetector`
+  // acima) — essa é a única forma de ajustar o limiar já em chamada,
+  // chamada pelo SettingsModal.tsx a cada mudança no slider. Sem efeito
+  // (e sem erro) se não estiver conectado; a próxima chamada já entra com
+  // o valor novo de qualquer forma, lido do settingsStore em join().
+  setMicSensitivity: (value) => {
+    speakingDetector?.setThreshold(value)
   }
 }))

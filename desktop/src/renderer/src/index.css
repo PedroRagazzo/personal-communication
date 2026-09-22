@@ -67,6 +67,34 @@
     outline: 2px solid var(--color-volt);
     outline-offset: 2px;
   }
+
+  /* Slider de sensibilidade do microfone (Configurações) — o range nativo
+     não tem como herdar cor/tema sem isso, só -webkit- porque o app só
+     roda em Chromium/Electron. */
+  input[type="range"] {
+    -webkit-appearance: none;
+    appearance: none;
+    height: 4px;
+    border-radius: 999px;
+    background: var(--color-panel-3);
+    outline: none;
+  }
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 14px;
+    height: 14px;
+    border-radius: 999px;
+    background: var(--color-volt);
+    border: 2px solid var(--color-void);
+    cursor: pointer;
+    margin-top: -5px;
+  }
+  input[type="range"]::-webkit-slider-runnable-track {
+    height: 4px;
+    border-radius: 999px;
+    background: transparent;
+  }
 }
 
 /* Corte chanfrado no canto superior direito — a assinatura estrutural do

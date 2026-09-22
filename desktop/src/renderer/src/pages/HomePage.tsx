@@ -1,12 +1,14 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useAuthStore } from '../stores/authStore'
 import { useServersStore } from '../stores/serversStore'
 import { useVoiceStore } from '../stores/voiceStore'
 import { useGoLiveStore } from '../stores/goLiveStore'
+import { useSettingsStore } from '../stores/settingsStore'
 import { ServerSidebar } from '../components/ServerSidebar'
 import { ChannelList } from '../components/ChannelList'
 import { ChatView } from '../components/ChatView'
 import { VoicePanel } from '../components/VoicePanel'
+import { SettingsModal } from '../components/SettingsModal'
 
 // Shell autenticado: navegação entre servidores/canais (fatia 2), chat em
 // tempo real (fatia 3), voz (fatia 4). Vídeo/tela/Go Live no cliente ainda
@@ -35,9 +37,19 @@ export function HomePage() {
   const joinVoice = useVoiceStore((s) => s.join)
   const joinGoLive = useGoLiveStore((s) => s.join)
 
+  const loadSettingsForUser = useSettingsStore((s) => s.loadForUser)
+  const [settingsOpen, setSettingsOpen] = useState(false)
+
   useEffect(() => {
     if (accessToken) loadServers(accessToken)
   }, [accessToken, loadServers])
+
+  // Configuração de microfone é por conta logada nesse aparelho (ver
+  // settingsStore.ts) — carrega assim que sabe quem é, antes de qualquer
+  // chance da pessoa entrar num canal de voz.
+  useEffect(() => {
+    if (user) loadSettingsForUser(user.id)
+  }, [user, loadSettingsForUser])
 
   if (!user || !accessToken) return null
 
@@ -98,6 +110,13 @@ export function HomePage() {
               <span className="font-mono text-xs text-mist-dim">#{user.discriminator}</span>
             </span>
             <button
+              onClick={() => setSettingsOpen(true)}
+              title="Configurações"
+              className="border border-line px-2.5 py-1 font-mono text-xs tracking-wide text-mist-dim transition hover:border-volt/60 hover:text-volt"
+            >
+              ⚙
+            </button>
+            <button
               onClick={() => logout()}
               className="border border-line px-3 py-1 font-mono text-xs tracking-wide text-mist-dim transition hover:border-plasma/60 hover:text-plasma"
             >
@@ -122,6 +141,8 @@ export function HomePage() {
           </div>
         )}
       </div>
+
+      {settingsOpen && <SettingsModal onClose={() => setSettingsOpen(false)} />}
     </div>
   )
 }
