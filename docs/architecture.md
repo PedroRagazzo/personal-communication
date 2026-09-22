@@ -99,7 +99,7 @@ Antes de introduzir C++ em qualquer componente, responder (regra do projeto): po
 ## Estrutura de diretórios
 
 ```
-tora-dos-burro/
+personal-communication/
 ├── backend/        Elixir/Phoenix (lib/, test/, priv/, config/)
 ├── desktop/        React + Electron + TS — ver estrutura do src/ abaixo
 ├── rust/           media/, encoder/, sdk/, networking/ — placeholders até FASE 12

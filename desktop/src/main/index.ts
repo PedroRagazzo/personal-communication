@@ -190,7 +190,7 @@ function registerShortcutHandlers(): void {
 // repositório é público) pra pasta de downloads do usuário e oferece
 // abrir — a pessoa só precisa confirmar a instalação do NSIS que já
 // conhece, não precisa mais ir procurar a versão nova manualmente.
-const GITHUB_REPO = 'PedroRagazzo/tora-dos-burro'
+const GITHUB_REPO = 'PedroRagazzo/personal-communication'
 const UPDATE_CHECK_INTERVAL_MS = 4 * 60 * 60 * 1000
 
 interface GitHubReleaseAsset {
