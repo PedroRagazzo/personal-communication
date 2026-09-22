@@ -316,10 +316,27 @@ function ScreenShareQualityMenu({
   onChange: (quality: ScreenShareQuality) => void
 }) {
   const [open, setOpen] = useState(false)
+  const containerRef = useRef<HTMLDivElement>(null)
   const currentLabel = RESOLUTIONS.find((res) => res.width === quality.width)?.label ?? `${quality.height}p`
 
+  // Fecha só ao clicar fora, não ao tirar o mouse de cima — o popover é
+  // `absolute` (fora do fluxo normal), então a caixa do `relative` abaixo
+  // não cobre o vão visual até ele; um `onMouseLeave` nesse vão fechava o
+  // menu antes da pessoa conseguir mover o mouse até a opção e clicar
+  // (reportado ao vivo pelo usuário).
+  useEffect(() => {
+    if (!open) return
+    function handleClickOutside(e: MouseEvent): void {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [open])
+
   return (
-    <div className="relative" onMouseLeave={() => setOpen(false)}>
+    <div className="relative" ref={containerRef}>
       <button
         onClick={() => setOpen((o) => !o)}
         className="bevel-sm border border-line bg-panel px-4 py-2 font-display text-xs font-bold tracking-wide text-mist-dim transition hover:border-mist-dim hover:text-mist"
