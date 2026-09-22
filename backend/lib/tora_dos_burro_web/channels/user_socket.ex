@@ -10,6 +10,7 @@ defmodule ToraDosBurroWeb.UserSocket do
   channel "channel:*", ToraDosBurroWeb.ChatChannel
   channel "voice:*", ToraDosBurroWeb.VoiceChannel
   channel "live:*", ToraDosBurroWeb.GoLiveChannel
+  channel "server:*", ToraDosBurroWeb.ServerChannel
 
   @impl true
   def connect(%{"token" => token}, socket, _connect_info) do
