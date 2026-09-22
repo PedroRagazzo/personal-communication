@@ -3,6 +3,7 @@ import * as api from '../services/api'
 import { connectSocket, disconnectSocket, updateSocketToken } from '../services/socket'
 import { useServersStore } from './serversStore'
 import { useChatStore } from './chatStore'
+import { usePresenceStore } from './presenceStore'
 
 const ACCESS_TOKEN_KEY = 'access_token'
 const REFRESH_TOKEN_KEY = 'refresh_token'
@@ -134,6 +135,7 @@ export const useAuthStore = create<AuthState>((set) => ({
     await clearStoredTokens()
     useChatStore.getState().reset()
     useServersStore.getState().reset()
+    usePresenceStore.getState().leave()
     disconnectSocket()
     set({ status: 'unauthenticated', user: null, accessToken: null })
   }

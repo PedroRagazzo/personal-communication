@@ -1,6 +1,6 @@
 {
   "name": "tora-dos-burro-desktop",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "private": true,
   "description": "TORA DOS BURRO — cliente desktop (Electron + React + TypeScript)",
   "author": "TORA DOS BURRO",

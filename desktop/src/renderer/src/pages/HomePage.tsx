@@ -4,11 +4,13 @@ import { useServersStore } from '../stores/serversStore'
 import { useVoiceStore } from '../stores/voiceStore'
 import { useGoLiveStore } from '../stores/goLiveStore'
 import { useSettingsStore } from '../stores/settingsStore'
+import { usePresenceStore } from '../stores/presenceStore'
 import { ServerSidebar } from '../components/ServerSidebar'
 import { ChannelList } from '../components/ChannelList'
 import { ChatView } from '../components/ChatView'
 import { VoicePanel } from '../components/VoicePanel'
 import { SettingsModal } from '../components/SettingsModal'
+import { MemberList } from '../components/MemberList'
 
 // Shell autenticado: navegação entre servidores/canais (fatia 2), chat em
 // tempo real (fatia 3), voz (fatia 4). Vídeo/tela/Go Live no cliente ainda
@@ -40,9 +42,18 @@ export function HomePage() {
   const loadSettingsForUser = useSettingsStore((s) => s.loadForUser)
   const [settingsOpen, setSettingsOpen] = useState(false)
 
+  const onlineUserIds = usePresenceStore((s) => s.onlineUserIds)
+  const joinPresence = usePresenceStore((s) => s.join)
+
   useEffect(() => {
     if (accessToken) loadServers(accessToken)
   }, [accessToken, loadServers])
+
+  // Presença de "quem está online" é por servidor (server:{id}, ver
+  // presenceStore.ts) — reentra sempre que o servidor selecionado muda.
+  useEffect(() => {
+    if (selectedServerId) joinPresence(selectedServerId)
+  }, [selectedServerId, joinPresence])
 
   // Configuração de microfone é por conta logada nesse aparelho (ver
   // settingsStore.ts) — carrega assim que sabe quem é, antes de qualquer
@@ -141,6 +152,13 @@ export function HomePage() {
           </div>
         )}
       </div>
+
+      <MemberList
+        server={selectedServer}
+        members={members}
+        onlineUserIds={onlineUserIds}
+        currentUserId={user.id}
+      />
 
       {settingsOpen && <SettingsModal onClose={() => setSettingsOpen(false)} />}
     </div>

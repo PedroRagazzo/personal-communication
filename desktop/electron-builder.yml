@@ -11,6 +11,12 @@ files:
 # Nenhuma dependência nativa no desktop/package.json (livekit-client, phoenix,
 # react, zustand são todos JS puro) — não há nada pra recompilar pro ABI do
 # Electron, então pular esse passo só economiza tempo de build.
+# Ícone da bandeja do Windows (main/index.ts, createTray) — build/ não entra
+# no pacote por padrão (só serve de fonte pro ícone do .exe/instalador em si),
+# então precisa ser copiado à parte pra existir em disco em runtime.
+extraResources:
+  - from: build/icon.ico
+    to: icon.ico
 npmRebuild: false
 win:
   executableName: tora-dos-burro

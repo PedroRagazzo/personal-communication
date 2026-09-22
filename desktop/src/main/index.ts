@@ -1,4 +1,4 @@
-import { app, BrowserWindow, desktopCapturer, ipcMain, Menu, safeStorage, session } from 'electron'
+import { app, BrowserWindow, desktopCapturer, ipcMain, Menu, nativeImage, safeStorage, session, Tray } from 'electron'
 import { join } from 'node:path'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 
@@ -133,6 +133,53 @@ function registerWindowControlHandlers(): void {
   })
 }
 
+// Bandeja do Windows, a pedido do usuário — fechar a janela (✕ do
+// TitleBar, ou Alt+F4) minimiza pra bandeja em vez de encerrar o processo
+// de verdade, pra continuar numa chamada de voz mesmo com a janela
+// fechada (Chromium não suspende WebRTC/getUserMedia de uma janela oculta,
+// só invisível). Só "Sair" no menu da bandeja — ou qualquer outro caminho
+// real de saída do Electron, coberto por `before-quit` abaixo, não só o
+// item do menu — encerra de verdade.
+let tray: Tray | null = null
+let mainWindow: BrowserWindow | null = null
+let isQuitting = false
+
+function trayIconPath(): string {
+  // Empacotado: `build/` não vai pro pacote por padrão (só alimenta o
+  // ícone do .exe/instalador), por isso precisou de extraResources em
+  // electron-builder.yml pra existir em disco em runtime.
+  return app.isPackaged
+    ? join(process.resourcesPath, 'icon.ico')
+    : join(__dirname, '../../build/icon.ico')
+}
+
+function showMainWindow(): void {
+  if (!mainWindow) return
+  if (mainWindow.isMinimized()) mainWindow.restore()
+  mainWindow.show()
+  mainWindow.focus()
+}
+
+function quitApp(): void {
+  isQuitting = true
+  app.quit()
+}
+
+function createTray(): void {
+  tray = new Tray(nativeImage.createFromPath(trayIconPath()))
+  tray.setToolTip('TORA DOS BURRO')
+  tray.setContextMenu(
+    Menu.buildFromTemplate([
+      { label: 'Abrir TORA DOS BURRO', click: showMainWindow },
+      { type: 'separator' },
+      { label: 'Sair', click: quitApp }
+    ])
+  )
+  // Clique único (não duplo) já restaura — convenção do Windows pra ícone
+  // de bandeja, diferente do macOS.
+  tray.on('click', showMainWindow)
+}
+
 function createWindow(): void {
   const win = new BrowserWindow({
     width: 1280,
@@ -152,6 +199,8 @@ function createWindow(): void {
     }
   })
 
+  mainWindow = win
+
   win.once('ready-to-show', () => win.show())
 
   // O botão de maximizar/restaurar do TitleBar precisa saber o estado atual
@@ -160,6 +209,17 @@ function createWindow(): void {
   // próprio clique nele.
   win.on('maximize', () => win.webContents.send('window:maximize-changed', true))
   win.on('unmaximize', () => win.webContents.send('window:maximize-changed', false))
+
+  // Fechar vai pra bandeja em vez de encerrar (ver createTray acima) — o
+  // próprio botão ✕ do TitleBar chama window:close, que chama win.close()
+  // normalmente; é aqui que isso vira "esconder" em vez de "fechar de
+  // verdade", exceto quando `isQuitting` (Sair da bandeja, ou qualquer
+  // outro caminho real de saída).
+  win.on('close', (event) => {
+    if (isQuitting) return
+    event.preventDefault()
+    win.hide()
+  })
 
   if (process.env['ELECTRON_RENDERER_URL']) {
     win.loadURL(process.env['ELECTRON_RENDERER_URL'])
@@ -181,10 +241,20 @@ app.whenReady().then(() => {
   registerScreenShareHandlers()
   registerWindowControlHandlers()
   createWindow()
+  createTray()
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
+    else showMainWindow()
   })
+})
+
+// Cobre qualquer caminho real de saída do processo (não só o "Sair" da
+// bandeja) — sem isso, um app.quit() disparado de outro jeito ainda cairia
+// no win.on('close') acima e só esconderia a janela, nunca encerrando de
+// verdade.
+app.on('before-quit', () => {
+  isQuitting = true
 })
 
 app.on('window-all-closed', () => {
