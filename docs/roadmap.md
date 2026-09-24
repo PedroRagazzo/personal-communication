@@ -148,6 +148,8 @@ escopo por decisão do usuário (fast-follow abaixo, não planejado). A FASE 11
 
 28. **Tela inicial de login em vez de cadastro, `v1.8.1`** — pedido do usuário, depois da limpeza de todas as contas de teste em produção (`ToraDosBurro.Release.wipe_users_except/2`). `App.tsx` abre em `login` (antes `register`, da época em que cadastro era o caminho normal e login só recuperação de sessão); o texto da `LoginPage.tsx` deixou de falar em "recuperar sessão". Verificado no Electron real: sem sessão, abre em "Entrar", e "Cadastre-se"/voltar trocam as telas nos dois sentidos.
 
+29. **Ícone do app na identidade visual, `v1.8.2`** — pedido do usuário. O ícone ainda era o microfone roxo da FASE 11, de antes da identidade da v1.0.4. Agora é a mesma marca do login e da barra de título: quadrado volt (`#d6ff3f`) com o corte chanfrado no canto superior direito e um "T" void (`#0a0a10`). Gerado por `desktop/scripts/make-icon.mjs` (`node scripts/make-icon.mjs`), sem dependência nova: a marca é só geometria, então o script rasteriza cada tamanho do `.ico` separadamente, com as bordas alinhadas ao pixel pra continuar nítido em 16px, e grava as entradas no mesmo formato do ícone anterior (7 tamanhos, 16–256px, BMP 32bpp) — o formato mais compatível com o NSIS. Verificado: tamanhos pequenos conferidos ampliados sobre fundo escuro e claro; instalador gerado sem erro; ícone extraído de dentro do `.exe` do app, do instalador e do `resources/icon.ico` da bandeja, os três com a marca nova.
+
 ## Processo de desenvolvimento (regras do projeto, mantidas)
 
 1. Não escrever código gigante de uma vez.
