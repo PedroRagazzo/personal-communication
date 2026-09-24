@@ -2,10 +2,9 @@ import { useState, type FormEvent } from 'react'
 import { useAuthStore } from '../stores/authStore'
 import * as api from '../services/api'
 
-// Caminho raro de recuperação — o normal é a sessão persistir sozinha (ver
-// RegisterPage). Login pede só usuário+senha; o discriminator só aparece se
-// o backend responder "ambiguous_username" (duas contas com o mesmo nome),
-// caso raro nesse deploy de grupo pequeno e conhecido.
+// Tela inicial pra quem não está logado. Pede só usuário+senha; o
+// discriminator só aparece se o backend responder "ambiguous_username" (duas
+// contas com o mesmo nome).
 export function LoginPage({ onSwitchToRegister }: { onSwitchToRegister: () => void }) {
   const login = useAuthStore((s) => s.login)
   const error = useAuthStore((s) => s.error)
@@ -47,10 +46,10 @@ export function LoginPage({ onSwitchToRegister }: { onSwitchToRegister: () => vo
           className="bevel space-y-5 border border-line bg-panel p-7 shadow-2xl shadow-black/40"
         >
           <div>
-            <p className="font-mono text-[11px] tracking-[0.25em] text-volt">RECUPERAR SESSÃO</p>
+            <p className="font-mono text-[11px] tracking-[0.25em] text-volt">ACESSO</p>
             <h1 className="mt-1 font-display text-2xl font-semibold text-mist">Entrar</h1>
             <p className="mt-2 text-xs leading-relaxed text-mist-dim">
-              Só precisa disso se a sessão salva se perdeu (dados limpos, outro dispositivo).
+              Depois de entrar, a sessão fica salva neste dispositivo.
             </p>
           </div>
 

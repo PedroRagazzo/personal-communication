@@ -8,9 +8,7 @@ import { TitleBar } from './components/TitleBar'
 export default function App() {
   const status = useAuthStore((s) => s.status)
   const bootstrap = useAuthStore((s) => s.bootstrap)
-  // Cadastro é o fluxo padrão agora — login (username#discriminator) só é
-  // necessário se a sessão salva se perder (ver docs/security.md).
-  const [screen, setScreen] = useState<'login' | 'register'>('register')
+  const [screen, setScreen] = useState<'login' | 'register'>('login')
 
   useEffect(() => {
     bootstrap()
