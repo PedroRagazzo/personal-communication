@@ -1,7 +1,7 @@
 defmodule ToraDosBurroWeb.ServerChannelTest do
   use ToraDosBurroWeb.ChannelCase, async: true
 
-  alias ToraDosBurro.{Accounts, Guardian, Servers}
+  alias ToraDosBurro.{Accounts, Channels, Guardian, Servers}
 
   setup do
     {:ok, owner} = register("serverowner")
@@ -112,6 +112,88 @@ defmodule ToraDosBurroWeb.ServerChannelTest do
       # de dentro da transação em si (ver o comentário na implementação).
       assert {:error, :banned} = Servers.use_invite(invite, banned_user)
       refute_broadcast "member:joined", %{}
+    end
+  end
+
+  describe "ocupação dos canais de voz (v1.8.0)" do
+    setup %{server: server} do
+      {:ok, voice_channel} =
+        Channels.create_channel(server, %{"name" => "Sala 1", "type" => "guild_voice"})
+
+      %{voice_channel: voice_channel}
+    end
+
+    test "quem entra no servidor depois vê quem já estava numa call", %{
+      owner: owner,
+      other: other,
+      server: server,
+      voice_channel: voice_channel
+    } do
+      other_id = other.id
+      voice_id = voice_channel.id
+
+      other_socket = connect_as(other)
+      {:ok, _, _} = subscribe_and_join(other_socket, "voice:#{voice_id}", %{})
+      # O presence_state do canal de voz só é enviado DEPOIS do track no
+      # tópico do servidor (mesmo handle_info) — serve de ponto de
+      # sincronização, sem isso o join abaixo podia rodar antes do track.
+      assert_push "presence_state", %{^other_id => _}
+
+      owner_socket = connect_as(owner)
+      {:ok, _, _} = subscribe_and_join(owner_socket, "server:#{server.id}", %{})
+      assert_push "presence_state", %{^other_id => %{metas: metas}}
+      assert Enum.any?(metas, &(&1[:voice_channel_id] == voice_id))
+    end
+
+    test "entrar na call avisa ao vivo quem já está no servidor", %{
+      owner: owner,
+      other: other,
+      server: server,
+      voice_channel: voice_channel
+    } do
+      other_id = other.id
+      voice_id = voice_channel.id
+
+      owner_socket = connect_as(owner)
+      {:ok, _, _} = subscribe_and_join(owner_socket, "server:#{server.id}", %{})
+
+      other_socket = connect_as(other)
+      {:ok, _, _} = subscribe_and_join(other_socket, "voice:#{voice_id}", %{})
+
+      assert_push "presence_diff", %{
+        joins: %{^other_id => %{metas: [%{voice_channel_id: ^voice_id}]}}
+      }
+    end
+
+    test "sair da call tira a pessoa do canal, sem tirar do online", %{
+      owner: owner,
+      other: other,
+      server: server,
+      voice_channel: voice_channel
+    } do
+      Process.flag(:trap_exit, true)
+      other_id = other.id
+      voice_id = voice_channel.id
+
+      owner_socket = connect_as(owner)
+      {:ok, _, _} = subscribe_and_join(owner_socket, "server:#{server.id}", %{})
+
+      other_socket = connect_as(other)
+      {:ok, _, _} = subscribe_and_join(other_socket, "server:#{server.id}", %{})
+      {:ok, _, other_voice} = subscribe_and_join(other_socket, "voice:#{voice_id}", %{})
+
+      assert_push "presence_diff", %{
+        joins: %{^other_id => %{metas: [%{voice_channel_id: ^voice_id}]}}
+      }
+
+      close(other_voice)
+
+      assert_push "presence_diff", %{
+        leaves: %{^other_id => %{metas: [%{voice_channel_id: ^voice_id}]}}
+      }
+
+      assert %{metas: [%{online_at: _}]} =
+               ToraDosBurroWeb.Presence.list("server:#{server.id}")[other_id]
     end
   end
 end

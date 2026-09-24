@@ -4,6 +4,7 @@ import type { ChannelSummary, ServerMember } from '../services/api'
 import { useVoiceStore, type ScreenShareQuality } from '../stores/voiceStore'
 import { useGoLiveStore } from '../stores/goLiveStore'
 import { ScreenSharePicker, RESOLUTIONS, FRAME_RATES } from './ScreenSharePicker'
+import { clampVolume } from './CallAudio'
 
 // Voz (FASE 11, fatia 4) + compartilhamento de tela (fatia 5) + câmera
 // (fatia 6) + Go Live (fatia 10): conectar entra no mesh WebRTC de
@@ -34,7 +35,6 @@ export function VoicePanel({
   const localMuted = useVoiceStore((s) => s.localMuted)
   const localDeafened = useVoiceStore((s) => s.localDeafened)
   const localPlaybackMuted = useVoiceStore((s) => s.localPlaybackMuted)
-  const remoteAudioStreams = useVoiceStore((s) => s.remoteAudioStreams)
   const remoteMicVolumes = useVoiceStore((s) => s.remoteMicVolumes)
   const remoteScreenVolumes = useVoiceStore((s) => s.remoteScreenVolumes)
   const setRemoteMicVolume = useVoiceStore((s) => s.setRemoteMicVolume)
@@ -351,25 +351,8 @@ export function VoicePanel({
             onVolumeContext={(e, peerId) => openVolumeMenu(e, { kind: 'golive', peerId })}
           />
 
-          {Object.entries(remoteAudioStreams).map(([peerId, stream]) => (
-            <RemoteAudio
-              key={peerId}
-              stream={stream}
-              // v1.6.0, bug real reportado: `localPlaybackMuted` entrava
-              // aqui também, deixando quem transmite com som do PC incapaz
-              // de ouvir a própria call — a call é a única coisa que a
-              // pessoa realmente precisa continuar ouvindo enquanto
-              // transmite. Efeito colateral aceito conscientemente: a voz
-              // dela na call agora entra na captura de loopback igual a
-              // qualquer outro som do PC, então quem estiver assistindo E
-              // na mesma call pode ouvir um leve eco com atraso da própria
-              // voz do streamer — mitigável abaixando o volume dessa
-              // transmissão especificamente (botão direito na tela/
-              // transmissão), não vale travar a call pra evitar isso.
-              muted={localDeafened}
-              volume={remoteMicVolumes[peerId] ?? 1}
-            />
-          ))}
+          {/* Áudio da call (mic de cada um) mora em CallAudio.tsx, montado
+              pela HomePage — tem que continuar tocando fora desta tela. */}
         </>
       )}
 
@@ -665,44 +648,6 @@ function ThumbnailVideo({ stream }: { stream: MediaStream }) {
   }, [stream])
 
   return <video ref={ref} autoPlay muted className="h-20 w-32 bg-black object-cover" />
-}
-
-// `HTMLMediaElement.volume` só aceita [0, 1] (nativamente não existe
-// "boost" acima de 100% — isso precisaria de um GainNode via Web Audio
-// API, não construído aqui) — clamp defensivo, não só o slider capado em
-// 100% abaixo, porque um valor já salvo antes dessa correção (ou algum
-// caminho futuro que reintroduza >100%) não pode voltar a derrubar o app.
-function clampVolume(volume: number): number {
-  return Math.min(1, Math.max(0, volume))
-}
-
-function RemoteAudio({
-  stream,
-  muted,
-  volume = 1
-}: {
-  stream: MediaStream
-  muted?: boolean
-  volume?: number
-}) {
-  const ref = useRef<HTMLAudioElement>(null)
-
-  useEffect(() => {
-    if (ref.current) ref.current.srcObject = stream
-  }, [stream])
-
-  // `volume` não é um atributo HTML de verdade (é só propriedade do
-  // elemento) — o React não reflete isso de forma confiável via prop JSX,
-  // então precisa aplicar via ref igual ao srcObject acima. `HTMLMediaElement
-  // .volume` só aceita [0, 1] — atribuir fora disso lança DOMException (não
-  // clampa sozinho); sem isso, um valor > 1 derrubava a árvore inteira do
-  // React (sem error boundary no app) — bug real reportado pelo usuário,
-  // ver clampVolume/VolumeMenu abaixo.
-  useEffect(() => {
-    if (ref.current) ref.current.volume = clampVolume(volume)
-  }, [volume])
-
-  return <audio ref={ref} autoPlay muted={muted} />
 }
 
 function RemoteVideo({

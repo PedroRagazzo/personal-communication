@@ -70,6 +70,7 @@ defmodule ToraDosBurroWeb.VoiceChannel do
   @impl true
   def handle_info(:after_join, socket) do
     user_id = socket.assigns.current_user.id
+    channel = socket.assigns.channel
 
     {:ok, _} =
       Presence.track(socket, user_id, %{
@@ -80,6 +81,19 @@ defmodule ToraDosBurroWeb.VoiceChannel do
         screen_sharing: false,
         screen_sharing_audio: false,
         joined_at: System.system_time(:second)
+      })
+
+    # v1.8.0: ocupação visível pra quem não está na call — o mesmo processo
+    # também se registra no tópico do servidor (`server:{id}`, o que
+    # ServerChannel já usa pra "quem está online"), com a mesma chave
+    # (user_id) e uma meta à parte. Como é este processo que é rastreado
+    # (não o ServerChannel), sair da call ou cair a conexão remove a meta
+    # sozinho. Sem Presence.update aqui de propósito (mute/deafen não vão
+    # pra cá): cada update é um leave+join, e são justamente rajadas de
+    # update que já causaram diffs fora de ordem antes (ver voiceStore.ts).
+    {:ok, _} =
+      Presence.track(self(), "server:#{channel.server_id}", user_id, %{
+        voice_channel_id: channel.id
       })
 
     push(socket, "presence_state", Presence.list(socket))

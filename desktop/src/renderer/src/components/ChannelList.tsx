@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react'
+import { useState, type FormEvent, type ReactNode } from 'react'
 import type { ChannelSummary, ServerMember, ServerSummary } from '../services/api'
 import type { VoiceParticipant } from '../stores/voiceStore'
 
@@ -14,7 +14,9 @@ export function ChannelList({
   voiceChannelId,
   voiceStatus,
   voiceParticipants,
-  speakingUserIds
+  speakingUserIds,
+  voiceOccupancy,
+  footer
 }: {
   server: ServerSummary | null
   channels: ChannelSummary[]
@@ -28,6 +30,8 @@ export function ChannelList({
   voiceStatus: 'idle' | 'connecting' | 'connected'
   voiceParticipants: VoiceParticipant[]
   speakingUserIds: Set<string>
+  voiceOccupancy: Record<string, string[]>
+  footer?: ReactNode
 }) {
   const [creating, setCreating] = useState(false)
   const [name, setName] = useState('')
@@ -118,12 +122,12 @@ export function ChannelList({
         {channels.map((channel) => {
           const active = channel.id === selectedChannelId
           // Clicar num canal de voz já entra direto (igual Discord) — ver
-          // HomePage.tsx, que decide isso no próprio onSelect. Aqui só
-          // decide o que mostrar: a lista de quem tá conectado aparece
-          // embaixo do canal em que você REALMENTE está (não uma prévia de
-          // canais que você não entrou — isso pediria presença do servidor
-          // pra canais nunca joinados, que esse projeto ainda não expõe).
+          // HomePage.tsx, que decide isso no próprio onSelect. No canal em
+          // que você está de verdade, a lista vem do voiceStore (tem quem
+          // está falando/mutado); nos outros, da presença do servidor
+          // (v1.8.0, só quem está lá — sem mute/fala, ver voice_channel.ex).
           const connectedToThis = channel.type === 'guild_voice' && channel.id === voiceChannelId && voiceStatus === 'connected'
+          const occupants = channel.type === 'guild_voice' && !connectedToThis ? (voiceOccupancy[channel.id] ?? []) : []
 
           return (
             <div key={channel.id} className="mb-0.5">
@@ -166,10 +170,25 @@ export function ChannelList({
                   })}
                 </ul>
               )}
+
+              {occupants.length > 0 && (
+                <ul className="ml-4 mt-0.5 space-y-0.5 border-l border-line-soft pl-2.5">
+                  {occupants.map((userId) => (
+                    <li key={userId} className="flex items-center gap-1.5 py-0.5">
+                      <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-panel-3 font-mono text-[9px] font-bold text-mist-dim">
+                        {initials(participantLabel(userId))}
+                      </span>
+                      <span className="truncate text-xs text-mist-dim">{participantLabel(userId)}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
           )
         })}
       </div>
+
+      {footer}
     </aside>
   )
 }

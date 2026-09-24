@@ -12,6 +12,11 @@ import type { ServerMember } from '../services/api'
 interface PresenceState {
   serverId: string | null
   onlineUserIds: Set<string>
+  // v1.8.0 — quem está em cada canal de voz (channelId -> userIds), visível
+  // sem precisar entrar na call. Vem de uma meta extra `voice_channel_id`
+  // que o próprio VoiceChannel registra neste mesmo tópico (ver
+  // voice_channel.ex) — mesma chave (user_id) da meta de "online".
+  voiceOccupancy: Record<string, string[]>
   join: (serverId: string) => void
   leave: () => void
 }
@@ -21,11 +26,12 @@ let phoenixChannel: Channel | null = null
 export const usePresenceStore = create<PresenceState>((set, get) => ({
   serverId: null,
   onlineUserIds: new Set(),
+  voiceOccupancy: {},
 
   join: (serverId) => {
     if (get().serverId === serverId) return
     get().leave()
-    set({ serverId, onlineUserIds: new Set() })
+    set({ serverId, onlineUserIds: new Set(), voiceOccupancy: {} })
 
     const socket = getSocket()
     if (!socket) return
@@ -33,7 +39,18 @@ export const usePresenceStore = create<PresenceState>((set, get) => ({
     const channel = socket.channel(`server:${serverId}`, {})
     const presence = new Presence(channel)
     presence.onSync(() => {
-      set({ onlineUserIds: new Set(presence.list<string>((userId) => userId)) })
+      const entries = presence.list<{ userId: string; metas: { voice_channel_id?: string }[] }>(
+        (userId, pres) => ({ userId, metas: pres.metas })
+      )
+      const voiceOccupancy: Record<string, string[]> = {}
+      for (const { userId, metas } of entries) {
+        for (const meta of metas) {
+          if (!meta.voice_channel_id) continue
+          const occupants = (voiceOccupancy[meta.voice_channel_id] ??= [])
+          if (!occupants.includes(userId)) occupants.push(userId)
+        }
+      }
+      set({ onlineUserIds: new Set(entries.map((e) => e.userId)), voiceOccupancy })
     })
 
     // v1.6.0 — quem já está com esse servidor selecionado recebe ao vivo
@@ -50,6 +67,6 @@ export const usePresenceStore = create<PresenceState>((set, get) => ({
   leave: () => {
     phoenixChannel?.leave()
     phoenixChannel = null
-    set({ serverId: null, onlineUserIds: new Set() })
+    set({ serverId: null, onlineUserIds: new Set(), voiceOccupancy: {} })
   }
 }))

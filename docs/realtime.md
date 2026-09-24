@@ -8,7 +8,7 @@ Este documento cobre o transporte de **controle e sinalização em tempo real** 
 |---|---|---|
 | `channel:{channel_id}` | Chat de texto: mensagens, edição, exclusão, reações, digitação | FASE 4 — `message:create`/histórico (fatia 3), edição/exclusão/reação (fatia 8) **implementados no cliente**; `typing:start`/`stop` ainda só no backend |
 | `voice:{channel_id}` | Sinalização de voz/vídeo/tela (SDP, ICE) — nunca mídia em si | FASE 6 |
-| `server:{server_id}` | Presença agregada do servidor (quem está online) | FASE 4/6 |
+| `server:{server_id}` | Presença agregada do servidor: quem está online (meta `online_at`, rastreada pelo `ServerChannel`) e, desde a v1.8.0, quem está em cada canal de voz (meta `voice_channel_id` com a mesma chave `user_id`, rastreada pelo próprio processo do `VoiceChannel` — some sozinha quando a pessoa sai da call ou cai); também `member:joined` (v1.6.0) | FASE 4/6, v1.2.0+ |
 | `user:{user_id}` | Eventos pessoais (notificações; DM quando essa feature entrar pós-MVP) | pós-MVP |
 
 Toda `join/3` de Channel autentica (token Guardian) e autoriza (roles + `permission_overwrites` do canal) antes de aceitar — nunca confiar em permissão alegada pelo cliente.

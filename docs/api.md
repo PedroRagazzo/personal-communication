@@ -130,7 +130,7 @@ Ver `realtime.md` e `media.md` para o detalhamento de cada tópico.
 | `channel:{channel_id}` | Chat de texto em tempo real |
 | `voice:{channel_id}` | Sinalização de voz/vídeo/tela (SDP, ICE) |
 | `live:{channel_id}` | Go Live (FASE 9) — emite tokens do LiveKit, nunca SDP/ICE (mídia vai direto ao SFU) |
-| `server:{server_id}` | Presença agregada do servidor |
+| `server:{server_id}` | Presença agregada do servidor — quem está online e em qual canal de voz (v1.8.0), mais `member:joined` (v1.6.0) |
 | `user:{user_id}` | Eventos pessoais (pós-MVP: DM, notificações) |
 
 ## FASE 9 — Go Live

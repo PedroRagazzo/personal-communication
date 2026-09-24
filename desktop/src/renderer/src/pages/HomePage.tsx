@@ -11,6 +11,8 @@ import { ChatView } from '../components/ChatView'
 import { VoicePanel } from '../components/VoicePanel'
 import { SettingsModal } from '../components/SettingsModal'
 import { MemberList } from '../components/MemberList'
+import { CallAudio } from '../components/CallAudio'
+import { VoiceStatusBar } from '../components/VoiceStatusBar'
 
 // Shell autenticado: navegação entre servidores/canais (fatia 2), chat em
 // tempo real (fatia 3), voz (fatia 4). Vídeo/tela/Go Live no cliente ainda
@@ -45,6 +47,7 @@ export function HomePage() {
   const [settingsOpen, setSettingsOpen] = useState(false)
 
   const onlineUserIds = usePresenceStore((s) => s.onlineUserIds)
+  const voiceOccupancy = usePresenceStore((s) => s.voiceOccupancy)
   const joinPresence = usePresenceStore((s) => s.join)
 
   useEffect(() => {
@@ -118,6 +121,8 @@ export function HomePage() {
         voiceStatus={voiceStatus}
         voiceParticipants={voiceParticipants}
         speakingUserIds={speakingUserIds}
+        voiceOccupancy={voiceOccupancy}
+        footer={<VoiceStatusBar channels={channels} onOpenChannel={selectChannel} />}
       />
       <div className="flex flex-1 flex-col">
         <header className="flex items-center justify-between border-b border-line-soft bg-panel px-4 py-3">
@@ -175,6 +180,8 @@ export function HomePage() {
         onlineUserIds={onlineUserIds}
         currentUserId={user.id}
       />
+
+      <CallAudio />
 
       {settingsOpen && <SettingsModal onClose={() => setSettingsOpen(false)} />}
     </div>
