@@ -1,5 +1,6 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, type RefObject } from 'react'
 import { useVoiceStore } from '../stores/voiceStore'
+import { useSettingsStore } from '../stores/settingsStore'
 
 // Áudio da call (mic de cada participante) — montado pela HomePage, não
 // pelo VoicePanel (v1.8.0). Antes vivia dentro do VoicePanel, que só existe
@@ -40,8 +41,22 @@ export function clampVolume(volume: number): number {
   return Math.min(1, Math.max(0, volume))
 }
 
+// Manda o som do elemento pro dispositivo de saída escolhido em
+// Configurações (v1.9.0). Se o salvo foi desconectado, `setSinkId` rejeita e
+// volta pro padrão do Windows, em vez de deixar o elemento mudo.
+export function useAudioOutput(ref: RefObject<HTMLMediaElement | null>): void {
+  const outputId = useSettingsStore((s) => s.devices.outputId)
+
+  useEffect(() => {
+    const element = ref.current
+    if (!element) return
+    element.setSinkId(outputId ?? '').catch(() => element.setSinkId('').catch(() => {}))
+  }, [ref, outputId])
+}
+
 function RemoteAudio({ stream, muted, volume = 1 }: { stream: MediaStream; muted?: boolean; volume?: number }) {
   const ref = useRef<HTMLAudioElement>(null)
+  useAudioOutput(ref)
 
   useEffect(() => {
     if (ref.current) ref.current.srcObject = stream

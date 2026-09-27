@@ -83,6 +83,29 @@ export class MeshManager {
     }
   }
 
+  // Troca de microfone no meio da call (v1.9.0) — replaceTrack no sender do
+  // mic de cada peer, sem renegociar (mesmo princípio das câmeras/telas). O
+  // stream antigo só é parado depois da troca, pra nunca ficar um instante
+  // sem track nenhuma sendo enviada.
+  async replaceLocalStream(stream: MediaStream): Promise<void> {
+    const oldStream = this.localStream
+    const oldTrack = oldStream?.getAudioTracks()[0]
+    const newTrack = stream.getAudioTracks()[0] ?? null
+    this.localStream = stream
+    if (oldTrack) {
+      await Promise.all(
+        [...this.peers.values()].map(({ connection }) =>
+          connection
+            .getSenders()
+            .find((s) => s.track === oldTrack)
+            ?.replaceTrack(newTrack)
+            .catch(() => {})
+        )
+      )
+    }
+    oldStream?.getTracks().forEach((track) => track.stop())
+  }
+
   setMuted(muted: boolean): void {
     this.localStream?.getAudioTracks().forEach((track) => {
       track.enabled = !muted

@@ -1,6 +1,9 @@
 import { create } from 'zustand'
 import { SPEAKING_THRESHOLD } from '../webrtc/SpeakingDetector'
-import { setSoundCuesEnabled as applySoundCuesToggle } from '../services/soundCues'
+import {
+  setSoundCuesEnabled as applySoundCuesToggle,
+  setOutputDevice as applySoundCuesOutput
+} from '../services/soundCues'
 
 export interface MicSettings {
   echoCancellation: boolean
@@ -37,23 +40,31 @@ const DEFAULT_SHORTCUTS: ShortcutSettings = {
   deafen: 'Control+Shift+D'
 }
 
+// v1.9.0 — `deviceId`s de `enumerateDevices()`; `null` = padrão do Windows.
+export interface AudioDeviceSettings {
+  inputId: string | null
+  outputId: string | null
+}
+
+const DEFAULT_DEVICES: AudioDeviceSettings = { inputId: null, outputId: null }
+
 interface PersistedSettings {
   mic: MicSettings
   soundCuesEnabled: boolean
   shortcuts: ShortcutSettings
+  devices: AudioDeviceSettings
 }
 
-interface SettingsState {
+interface SettingsState extends PersistedSettings {
   userId: string | null
-  mic: MicSettings
-  soundCuesEnabled: boolean
-  shortcuts: ShortcutSettings
   loadForUser: (userId: string) => void
   setEchoCancellation: (value: boolean) => void
   setNoiseSuppression: (value: boolean) => void
   setMicSensitivity: (value: number) => void
   setSoundCuesEnabled: (value: boolean) => void
   setShortcut: (action: keyof ShortcutSettings, accelerator: string | null) => Promise<boolean>
+  setInputDevice: (deviceId: string | null) => void
+  setOutputDevice: (deviceId: string | null) => void
 }
 
 // Configuração de microfone é sobre o dispositivo/ambiente físico da
@@ -71,15 +82,21 @@ function storageKey(userId: string): string {
   return `tora-mic-settings:${userId}`
 }
 
+const DEFAULT_SETTINGS: PersistedSettings = {
+  mic: DEFAULT_MIC_SETTINGS,
+  soundCuesEnabled: DEFAULT_SOUND_CUES_ENABLED,
+  shortcuts: DEFAULT_SHORTCUTS,
+  devices: DEFAULT_DEVICES
+}
+
 function loadFromStorage(userId: string): PersistedSettings {
   try {
     const raw = localStorage.getItem(storageKey(userId))
-    if (!raw) {
-      return { mic: DEFAULT_MIC_SETTINGS, soundCuesEnabled: DEFAULT_SOUND_CUES_ENABLED, shortcuts: DEFAULT_SHORTCUTS }
-    }
+    if (!raw) return DEFAULT_SETTINGS
     const parsed = JSON.parse(raw) as Partial<MicSettings> & {
       soundCuesEnabled?: boolean
       shortcuts?: Partial<ShortcutSettings>
+      devices?: Partial<AudioDeviceSettings>
     }
     return {
       mic: {
@@ -91,10 +108,14 @@ function loadFromStorage(userId: string): PersistedSettings {
       shortcuts: {
         mute: parsed.shortcuts?.mute ?? DEFAULT_SHORTCUTS.mute,
         deafen: parsed.shortcuts?.deafen ?? DEFAULT_SHORTCUTS.deafen
+      },
+      devices: {
+        inputId: parsed.devices?.inputId ?? null,
+        outputId: parsed.devices?.outputId ?? null
       }
     }
   } catch {
-    return { mic: DEFAULT_MIC_SETTINGS, soundCuesEnabled: DEFAULT_SOUND_CUES_ENABLED, shortcuts: DEFAULT_SHORTCUTS }
+    return DEFAULT_SETTINGS
   }
 }
 
@@ -105,7 +126,8 @@ function saveToStorage(userId: string, settings: PersistedSettings): void {
       JSON.stringify({
         ...settings.mic,
         soundCuesEnabled: settings.soundCuesEnabled,
-        shortcuts: settings.shortcuts
+        shortcuts: settings.shortcuts,
+        devices: settings.devices
       })
     )
   } catch {
@@ -113,67 +135,74 @@ function saveToStorage(userId: string, settings: PersistedSettings): void {
   }
 }
 
-export const useSettingsStore = create<SettingsState>((set, get) => ({
-  userId: null,
-  mic: DEFAULT_MIC_SETTINGS,
-  soundCuesEnabled: DEFAULT_SOUND_CUES_ENABLED,
-  shortcuts: DEFAULT_SHORTCUTS,
-
-  loadForUser: (userId) => {
-    if (get().userId === userId) return
-    const loaded = loadFromStorage(userId)
-    set({ userId, mic: loaded.mic, soundCuesEnabled: loaded.soundCuesEnabled, shortcuts: loaded.shortcuts })
-    applySoundCuesToggle(loaded.soundCuesEnabled)
-    window.api.shortcuts.set('mute', loaded.shortcuts.mute)
-    window.api.shortcuts.set('deafen', loaded.shortcuts.deafen)
-  },
-
-  setEchoCancellation: (echoCancellation) => {
-    const mic = { ...get().mic, echoCancellation }
-    set({ mic })
-    if (get().userId) {
-      saveToStorage(get().userId as string, { mic, soundCuesEnabled: get().soundCuesEnabled, shortcuts: get().shortcuts })
-    }
-  },
-
-  setNoiseSuppression: (noiseSuppression) => {
-    const mic = { ...get().mic, noiseSuppression }
-    set({ mic })
-    if (get().userId) {
-      saveToStorage(get().userId as string, { mic, soundCuesEnabled: get().soundCuesEnabled, shortcuts: get().shortcuts })
-    }
-  },
-
-  setMicSensitivity: (micSensitivity) => {
-    const mic = { ...get().mic, micSensitivity }
-    set({ mic })
-    if (get().userId) {
-      saveToStorage(get().userId as string, { mic, soundCuesEnabled: get().soundCuesEnabled, shortcuts: get().shortcuts })
-    }
-  },
-
-  setSoundCuesEnabled: (soundCuesEnabled) => {
-    set({ soundCuesEnabled })
-    applySoundCuesToggle(soundCuesEnabled)
-    if (get().userId) {
-      saveToStorage(get().userId as string, { mic: get().mic, soundCuesEnabled, shortcuts: get().shortcuts })
-    }
-  },
-
-  // Registra de verdade no processo main ANTES de salvar/confirmar — se o
-  // SO recusar (já reservado por outro programa), não atualiza o estado
-  // nem persiste, e quem chamou (SettingsModal.tsx) sabe pelo `false` que
-  // volta que precisa pedir outra tecla, em vez de salvar uma preferência
-  // que nunca funcionou de verdade.
-  setShortcut: async (action, accelerator) => {
-    const { ok } = await window.api.shortcuts.set(action, accelerator)
-    if (!ok) return false
-
-    const shortcuts = { ...get().shortcuts, [action]: accelerator }
-    set({ shortcuts })
-    if (get().userId) {
-      saveToStorage(get().userId as string, { mic: get().mic, soundCuesEnabled: get().soundCuesEnabled, shortcuts })
-    }
-    return true
+export const useSettingsStore = create<SettingsState>((set, get) => {
+  function persist(): void {
+    const { userId, mic, soundCuesEnabled, shortcuts, devices } = get()
+    if (userId) saveToStorage(userId, { mic, soundCuesEnabled, shortcuts, devices })
   }
-}))
+
+  return {
+    userId: null,
+    ...DEFAULT_SETTINGS,
+
+    loadForUser: (userId) => {
+      if (get().userId === userId) return
+      const loaded = loadFromStorage(userId)
+      set({ userId, ...loaded })
+      applySoundCuesToggle(loaded.soundCuesEnabled)
+      applySoundCuesOutput(loaded.devices.outputId)
+      window.api.shortcuts.set('mute', loaded.shortcuts.mute)
+      window.api.shortcuts.set('deafen', loaded.shortcuts.deafen)
+    },
+
+    setEchoCancellation: (echoCancellation) => {
+      set({ mic: { ...get().mic, echoCancellation } })
+      persist()
+    },
+
+    setNoiseSuppression: (noiseSuppression) => {
+      set({ mic: { ...get().mic, noiseSuppression } })
+      persist()
+    },
+
+    setMicSensitivity: (micSensitivity) => {
+      set({ mic: { ...get().mic, micSensitivity } })
+      persist()
+    },
+
+    setSoundCuesEnabled: (soundCuesEnabled) => {
+      set({ soundCuesEnabled })
+      applySoundCuesToggle(soundCuesEnabled)
+      persist()
+    },
+
+    // Só guarda a preferência — trocar o mic de uma call em andamento é com
+    // voiceStore.applyInputDevice() (settingsStore nunca importa voiceStore).
+    setInputDevice: (inputId) => {
+      set({ devices: { ...get().devices, inputId } })
+      persist()
+    },
+
+    // Os elementos de áudio/vídeo leem isso direto (useAudioOutput, em
+    // CallAudio.tsx); os sons de identificação têm um AudioContext próprio.
+    setOutputDevice: (outputId) => {
+      set({ devices: { ...get().devices, outputId } })
+      applySoundCuesOutput(outputId)
+      persist()
+    },
+
+    // Registra de verdade no processo main ANTES de salvar/confirmar — se o
+    // SO recusar (já reservado por outro programa), não atualiza o estado
+    // nem persiste, e quem chamou (SettingsModal.tsx) sabe pelo `false` que
+    // volta que precisa pedir outra tecla, em vez de salvar uma preferência
+    // que nunca funcionou de verdade.
+    setShortcut: async (action, accelerator) => {
+      const { ok } = await window.api.shortcuts.set(action, accelerator)
+      if (!ok) return false
+
+      set({ shortcuts: { ...get().shortcuts, [action]: accelerator } })
+      persist()
+      return true
+    }
+  }
+})

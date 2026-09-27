@@ -7,6 +7,7 @@ import { SpeakingDetector } from '../webrtc/SpeakingDetector'
 import { useSettingsStore } from './settingsStore'
 import { playJoinVoiceSound, playLeaveVoiceSound, playMuteSound, playUnmuteSound } from '../services/soundCues'
 import { limitAudioTrack } from '../webrtc/audioLimiter'
+import { captureMicrophone } from '../webrtc/microphone'
 
 export interface ScreenShareQuality {
   width: number
@@ -82,6 +83,7 @@ interface VoiceState {
   stopScreenShare: () => void
   toggleVideo: () => Promise<void>
   setMicSensitivity: (value: number) => void
+  applyInputDevice: () => Promise<void>
   setRemoteMicVolume: (peerId: string, volume: number) => void
   setRemoteScreenVolume: (peerId: string, volume: number) => void
   // Chamadas pelo goLiveStore e por essa própria store (startScreenShare/
@@ -94,6 +96,10 @@ interface VoiceState {
 let phoenixChannel: Channel | null = null
 let mesh: MeshManager | null = null
 let speakingDetector: SpeakingDetector | null = null
+let localUserId: string | null = null
+// Trocas de microfone rápidas em sequência: só a última vale (ver
+// applyInputDevice).
+let micSwitchSeq = 0
 // Guardada pra poder recapturar a MESMA fonte com novos parâmetros de
 // qualidade sem reabrir o ScreenSharePicker (ver updateScreenShareQuality
 // abaixo) — o handler do main (setDisplayMediaRequestHandler) consome
@@ -160,20 +166,14 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
       return
     }
 
-    // Cancelamento de eco/ruído são constraints de captura (Configurações →
-    // Microfone, ver settingsStore.ts) — lidas aqui uma vez, no momento de
-    // entrar; ajustar depois de já estar na chamada usa applyConstraints()
-    // direto na track (SettingsModal.tsx), sem precisar recapturar nem
-    // reentrar no canal.
+    // Dispositivo e cancelamento de eco/ruído vêm das Configurações (ver
+    // webrtc/microphone.ts). Mudar eco/ruído já na chamada usa
+    // applyConstraints() direto na track (SettingsModal.tsx); mudar o
+    // dispositivo usa applyInputDevice() abaixo.
     const micSettings = useSettingsStore.getState().mic
     let localStream: MediaStream
     try {
-      localStream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          echoCancellation: micSettings.echoCancellation,
-          noiseSuppression: micSettings.noiseSuppression
-        }
-      })
+      localStream = await captureMicrophone()
     } catch (err) {
       set({
         status: 'idle',
@@ -417,6 +417,7 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
     mesh = meshManager
     phoenixChannel = channel
     speakingDetector = detector
+    localUserId = currentUserId
     set({ status: 'connected', localAudioStream: localStream })
     playJoinVoiceSound()
   },
@@ -743,6 +744,39 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
   // o valor novo de qualquer forma, lido do settingsStore em join().
   setMicSensitivity: (value) => {
     speakingDetector?.setThreshold(value)
+  },
+
+  // Troca de microfone já na call (v1.9.0), chamada pelo SettingsModal logo
+  // depois de settingsStore.setInputDevice. Captura o novo ANTES de largar o
+  // antigo: se a captura falhar, a call continua com o mic que já estava.
+  applyInputDevice: async () => {
+    if (get().status !== 'connected' || !mesh) return
+    const seq = ++micSwitchSeq
+    const currentMesh = mesh
+
+    let stream: MediaStream
+    try {
+      stream = await captureMicrophone()
+    } catch (err) {
+      set({ error: err instanceof Error ? `microfone: ${err.message}` : 'falha ao trocar o microfone' })
+      return
+    }
+
+    if (seq !== micSwitchSeq || mesh !== currentMesh) {
+      stream.getTracks().forEach((track) => track.stop())
+      return
+    }
+
+    stream.getAudioTracks().forEach((track) => {
+      track.enabled = !get().localMuted
+    })
+    await currentMesh.replaceLocalStream(stream)
+    if (mesh !== currentMesh) return
+    if (localUserId) {
+      speakingDetector?.unwatch(localUserId)
+      speakingDetector?.watch(localUserId, stream)
+    }
+    set({ localAudioStream: stream, error: null })
   },
 
   // Botão direito num participante da call (VoicePanel.tsx) — só afeta a

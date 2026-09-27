@@ -1,25 +1,30 @@
 import { useEffect, useState } from 'react'
 import { useSettingsStore, MIC_SENSITIVITY_MIN, MIC_SENSITIVITY_MAX } from '../stores/settingsStore'
 import { useVoiceStore } from '../stores/voiceStore'
+import { captureMicrophone } from '../webrtc/microphone'
+import { playOutputTestSound } from '../services/soundCues'
 import { Toggle } from './Toggle'
 
 const METER_SAMPLE_MS = 100
 const METER_MAX = 100
 
-// Configurações básicas do app — só Microfone por enquanto (o pedido
-// concreto até agora). Modal no mesmo padrão visual de ScreenSharePicker.tsx
+// Configurações do app. Modal no mesmo padrão visual de ScreenSharePicker.tsx
 // / JoinServerDialog.tsx (overlay fixo, clique fora fecha).
 export function SettingsModal({ onClose }: { onClose: () => void }) {
   const mic = useSettingsStore((s) => s.mic)
   const soundCuesEnabled = useSettingsStore((s) => s.soundCuesEnabled)
   const shortcuts = useSettingsStore((s) => s.shortcuts)
+  const devices = useSettingsStore((s) => s.devices)
   const setEchoCancellation = useSettingsStore((s) => s.setEchoCancellation)
   const setNoiseSuppression = useSettingsStore((s) => s.setNoiseSuppression)
   const setMicSensitivity = useSettingsStore((s) => s.setMicSensitivity)
   const setSoundCuesEnabled = useSettingsStore((s) => s.setSoundCuesEnabled)
   const setShortcut = useSettingsStore((s) => s.setShortcut)
+  const setInputDevice = useSettingsStore((s) => s.setInputDevice)
+  const setOutputDevice = useSettingsStore((s) => s.setOutputDevice)
   const [shortcutError, setShortcutError] = useState<string | null>(null)
   const applyMicSensitivity = useVoiceStore((s) => s.setMicSensitivity)
+  const applyInputDevice = useVoiceStore((s) => s.applyInputDevice)
   const activeCallStream = useVoiceStore((s) => s.localAudioStream)
 
   const [previewStream, setPreviewStream] = useState<MediaStream | null>(null)
@@ -37,16 +42,14 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
     let cancelled = false
     let stream: MediaStream | null = null
 
-    navigator.mediaDevices
-      .getUserMedia({
-        audio: { echoCancellation: mic.echoCancellation, noiseSuppression: mic.noiseSuppression }
-      })
+    captureMicrophone()
       .then((s) => {
         if (cancelled) {
           s.getTracks().forEach((t) => t.stop())
           return
         }
         stream = s
+        setMicError(null)
         setPreviewStream(s)
       })
       .catch((err) => {
@@ -57,12 +60,20 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
       cancelled = true
       stream?.getTracks().forEach((t) => t.stop())
     }
-    // Só refaz a captura se a chamada ativa aparecer/sumir — trocar eco/ruído
-    // não precisa recapturar, aplica direto na track existente (handlers abaixo).
+    // Recaptura só se a chamada aparecer/sumir ou o dispositivo mudar — trocar
+    // eco/ruído aplica direto na track existente (handlers abaixo).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeCallStream])
+  }, [activeCallStream, devices.inputId])
 
   const meterStream = activeCallStream ?? previewStream
+  // Os nomes dos dispositivos só vêm depois de uma captura liberada — por
+  // isso relista quando o stream do medidor muda.
+  const { inputs, outputs } = useAudioDevices(meterStream)
+
+  function handleInputDeviceChange(deviceId: string | null): void {
+    setInputDevice(deviceId)
+    applyInputDevice()
+  }
 
   function applyLiveConstraint(patch: MediaTrackConstraints): void {
     meterStream?.getAudioTracks()[0]?.applyConstraints(patch).catch(() => {})
@@ -143,6 +154,13 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
             <p className="border-l-2 border-plasma bg-plasma/10 px-3 py-2 text-xs text-plasma">{micError}</p>
           )}
 
+          <DeviceSelect
+            label="Dispositivo de entrada"
+            devices={inputs}
+            value={devices.inputId}
+            onChange={handleInputDeviceChange}
+          />
+
           <Toggle
             label="Cancelamento de eco"
             checked={mic.echoCancellation}
@@ -181,6 +199,29 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
           </div>
         </section>
 
+        <section className="mt-5 space-y-3 border-t border-line-soft pt-5">
+          <h4 className="font-mono text-[10px] tracking-[0.2em] text-mist-dim">SAÍDA DE ÁUDIO</h4>
+          <div className="flex items-end gap-2">
+            <div className="flex-1">
+              <DeviceSelect
+                label="Dispositivo de saída"
+                devices={outputs}
+                value={devices.outputId}
+                onChange={setOutputDevice}
+              />
+            </div>
+            <button
+              onClick={playOutputTestSound}
+              className="bevel-sm border border-line px-3 py-2.5 font-mono text-xs tracking-wide text-mist-dim transition hover:border-volt/60 hover:text-volt"
+            >
+              TESTAR
+            </button>
+          </div>
+          <p className="text-xs leading-relaxed text-mist-dim">
+            Onde você ouve a call, as telas compartilhadas, as transmissões e os sons do app.
+          </p>
+        </section>
+
         <button
           onClick={onClose}
           className="mt-5 font-mono text-xs tracking-wide text-mist-dim transition hover:text-mist"
@@ -189,6 +230,70 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
         </button>
       </div>
     </div>
+  )
+}
+
+// "default"/"communications" são aliases do Windows pra dispositivos que
+// também aparecem na lista pelo nome — ficam de fora, "Padrão do Windows"
+// (null) já cobre o default.
+function useAudioDevices(refreshKey: unknown): { inputs: MediaDeviceInfo[]; outputs: MediaDeviceInfo[] } {
+  const [all, setAll] = useState<MediaDeviceInfo[]>([])
+
+  useEffect(() => {
+    let cancelled = false
+    function refresh(): void {
+      navigator.mediaDevices
+        .enumerateDevices()
+        .then((list) => {
+          if (!cancelled) setAll(list)
+        })
+        .catch(() => {})
+    }
+    refresh()
+    navigator.mediaDevices.addEventListener('devicechange', refresh)
+    return () => {
+      cancelled = true
+      navigator.mediaDevices.removeEventListener('devicechange', refresh)
+    }
+  }, [refreshKey])
+
+  const real = all.filter((d) => d.deviceId !== 'default' && d.deviceId !== 'communications')
+  return {
+    inputs: real.filter((d) => d.kind === 'audioinput'),
+    outputs: real.filter((d) => d.kind === 'audiooutput')
+  }
+}
+
+function DeviceSelect({
+  label,
+  devices,
+  value,
+  onChange
+}: {
+  label: string
+  devices: MediaDeviceInfo[]
+  value: string | null
+  onChange: (deviceId: string | null) => void
+}) {
+  const missing = value !== null && !devices.some((d) => d.deviceId === value)
+
+  return (
+    <label className="block space-y-1.5">
+      <span className="text-sm text-mist">{label}</span>
+      <select
+        value={value ?? ''}
+        onChange={(e) => onChange(e.target.value || null)}
+        className="w-full border border-line bg-panel-2 px-3 py-2 text-sm text-mist outline-none transition scheme-dark focus:border-volt"
+      >
+        <option value="">Padrão do Windows</option>
+        {devices.map((d, i) => (
+          <option key={d.deviceId} value={d.deviceId}>
+            {d.label || `Dispositivo ${i + 1}`}
+          </option>
+        ))}
+        {missing && <option value={value}>Desconectado (usando o padrão)</option>}
+      </select>
+    </label>
   )
 }
 

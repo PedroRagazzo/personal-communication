@@ -13,9 +13,23 @@
 
 let audioContext: AudioContext | null = null
 let enabled = true
+let outputDeviceId: string | null = null
+
+// `AudioContext.setSinkId` existe no Chromium (110+), mas ainda não está
+// nos tipos do lib.dom.
+type SinkableAudioContext = AudioContext & { setSinkId(sinkId: string): Promise<void> }
+
+function applyOutputDevice(context: AudioContext): void {
+  const sinkable = context as SinkableAudioContext
+  // Dispositivo salvo que foi desconectado: volta pro padrão em vez de ficar mudo.
+  sinkable.setSinkId(outputDeviceId ?? '').catch(() => sinkable.setSinkId('').catch(() => {}))
+}
 
 function getContext(): AudioContext {
-  if (!audioContext) audioContext = new AudioContext()
+  if (!audioContext) {
+    audioContext = new AudioContext()
+    applyOutputDevice(audioContext)
+  }
   return audioContext
 }
 
@@ -24,6 +38,12 @@ function getContext(): AudioContext {
 // simples, sem Zustand: só isso já precisa, nada mais lê esse estado.
 export function setSoundCuesEnabled(value: boolean): void {
   enabled = value
+}
+
+// v1.9.0 — mesma saída escolhida em Configurações pro resto do app.
+export function setOutputDevice(deviceId: string | null): void {
+  outputDeviceId = deviceId
+  if (audioContext) applyOutputDevice(audioContext)
 }
 
 interface Note {
@@ -55,8 +75,8 @@ function playNote(context: AudioContext, note: Note): void {
   oscillator.stop(startTime + note.duration + 0.02)
 }
 
-function playSequence(notes: Note[]): void {
-  if (!enabled) return
+function playSequence(notes: Note[], force = false): void {
+  if (!enabled && !force) return
   // Falha silenciosa de propósito — um som de identificação nunca deveria
   // derrubar a ação real (entrar na call, mutar) por causa de autoplay
   // policy ou qualquer outra restrição do navegador/SO em torno de áudio.
@@ -73,6 +93,18 @@ export function playJoinVoiceSound(): void {
     { frequency: 493.88, at: 0, duration: 0.09 },
     { frequency: 659.25, at: 0.08, duration: 0.16 }
   ])
+}
+
+// Botão "Testar" da saída de áudio em Configurações — toca mesmo com os sons
+// de identificação desligados, é um pedido explícito.
+export function playOutputTestSound(): void {
+  playSequence(
+    [
+      { frequency: 493.88, at: 0, duration: 0.09 },
+      { frequency: 659.25, at: 0.08, duration: 0.16 }
+    ],
+    true
+  )
 }
 
 export function playLeaveVoiceSound(): void {

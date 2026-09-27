@@ -4,7 +4,7 @@ import type { ChannelSummary, ServerMember } from '../services/api'
 import { useVoiceStore, type ScreenShareQuality } from '../stores/voiceStore'
 import { useGoLiveStore } from '../stores/goLiveStore'
 import { ScreenSharePicker, RESOLUTIONS, FRAME_RATES } from './ScreenSharePicker'
-import { clampVolume } from './CallAudio'
+import { clampVolume, useAudioOutput } from './CallAudio'
 
 // Voz (FASE 11, fatia 4) + compartilhamento de tela (fatia 5) + câmera
 // (fatia 6) + Go Live (fatia 10): conectar entra no mesh WebRTC de
@@ -17,9 +17,8 @@ import { clampVolume } from './CallAudio'
 // pelo mesh, vai direto pro LiveKit. As conexões vivem nas stores, não
 // neste componente — trocar de canal só esconde os controles, não
 // desconecta (mesmo comportamento do Discord: sair da visão do canal
-// de voz não te tira da chamada). Falta pra uma próxima fatia: uma
-// barra persistente mostrando "conectado em #x" visível de qualquer
-// lugar do app.
+// de voz não te tira da chamada — a barra fixa em VoiceStatusBar.tsx e o
+// áudio em CallAudio.tsx continuam de qualquer tela).
 export function VoicePanel({
   channel,
   currentUserId,
@@ -670,6 +669,7 @@ function RemoteVideo({
   large?: boolean
 }) {
   const ref = useRef<HTMLVideoElement>(null)
+  useAudioOutput(ref)
 
   useEffect(() => {
     if (ref.current) ref.current.srcObject = stream
