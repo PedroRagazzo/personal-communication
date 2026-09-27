@@ -43,6 +43,9 @@ export function VoicePanel({
   const localScreenStream = useVoiceStore((s) => s.localScreenStream)
   const screenShareQuality = useVoiceStore((s) => s.screenShareQuality)
   const remoteScreenStreams = useVoiceStore((s) => s.remoteScreenStreams)
+  const focusedScreenShareId = useVoiceStore((s) => s.focusedScreenShareId)
+  const screenFocusRequestedAt = useVoiceStore((s) => s.screenFocusRequestedAt)
+  const focusScreenShare = useVoiceStore((s) => s.focusScreenShare)
   const videoEnabled = useVoiceStore((s) => s.videoEnabled)
   const localCameraStream = useVoiceStore((s) => s.localCameraStream)
   const remoteCameraStreams = useVoiceStore((s) => s.remoteCameraStreams)
@@ -73,6 +76,27 @@ export function VoicePanel({
   const stopWatchingStream = useGoLiveStore((s) => s.stopWatchingStream)
 
   const [pickerTarget, setPickerTarget] = useState<'screen' | 'golive' | null>(null)
+  const screenAreaRef = useRef<HTMLDivElement>(null)
+
+  // Botão TELA (aqui ou na lista de canais, v1.9.1): rola até a tela
+  // compartilhada. Só pedidos recentes — senão toda vez que a pessoa abrisse
+  // o canal de voz depois de um clique antigo a tela rolaria sozinha.
+  useEffect(() => {
+    const area = screenAreaRef.current
+    if (!area || !screenFocusRequestedAt || Date.now() - screenFocusRequestedAt > 1500) return
+    const scroll = (): void => area.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    scroll()
+    // Vindo de outra tela, o painel acabou de montar e os vídeos ainda não
+    // têm altura — não há o que rolar. Rola de novo quando eles carregarem
+    // (a área cresce), durante a mesma janela do pedido.
+    const observer = new ResizeObserver(scroll)
+    observer.observe(area)
+    const stop = setTimeout(() => observer.disconnect(), 1500)
+    return () => {
+      observer.disconnect()
+      clearTimeout(stop)
+    }
+  }, [screenFocusRequestedAt])
 
   // Menu de contexto de volume (botão direito) — um só popover compartilhado
   // por mic/tela/transmissão em vez de um por linha/tile, pra não duplicar
@@ -247,7 +271,18 @@ export function VoicePanel({
                         {watchingUserIds.has(p.userId) ? '● ASSISTINDO' : '● ENTRAR'}
                       </button>
                     )}
-                    {p.screen_sharing && <span title="Compartilhando tela">🖥️</span>}
+                    {p.screen_sharing && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          focusScreenShare(p.userId)
+                        }}
+                        title="Ver a tela compartilhada"
+                        className="font-mono text-[10px] font-bold tracking-wide text-plasma transition hover:text-plasma-soft"
+                      >
+                        🖥️ TELA
+                      </button>
+                    )}
                     {video && <span title="Câmera ligada">🎥</span>}
                     {deafened && <span title="Ensurdecido">🙉</span>}
                     <span className={muted ? 'text-plasma' : 'text-volt'}>{muted ? '🔇' : '🎙️'}</span>
@@ -303,36 +338,40 @@ export function VoicePanel({
             <RemoteVideo key={peerId} stream={stream} label={participantName(peerId)} />
           ))}
 
-          {screenShares.length === 1 && (
-            <div
-              className="w-full"
-              onContextMenu={(e) => {
-                if (screenShares[0].id !== currentUserId) {
-                  openVolumeMenu(e, { kind: 'screen', peerId: screenShares[0].id })
-                }
-              }}
-            >
-              <RemoteVideo
-                stream={screenShares[0].stream}
-                label={
-                  screenShares[0].id === currentUserId
-                    ? 'Você está compartilhando a tela'
-                    : `${screenShares[0].label} está compartilhando a tela`
-                }
-                muted={screenShares[0].id === currentUserId || localPlaybackMuted}
-                volume={remoteScreenVolumes[screenShares[0].id] ?? 1}
-                large
-              />
+          {screenShares.length > 0 && (
+            <div ref={screenAreaRef} className="w-full scroll-mt-4">
+              {screenShares.length === 1 ? (
+                <div
+                  onContextMenu={(e) => {
+                    if (screenShares[0].id !== currentUserId) {
+                      openVolumeMenu(e, { kind: 'screen', peerId: screenShares[0].id })
+                    }
+                  }}
+                >
+                  <RemoteVideo
+                    stream={screenShares[0].stream}
+                    label={
+                      screenShares[0].id === currentUserId
+                        ? 'Você está compartilhando a tela'
+                        : `${screenShares[0].label} está compartilhando a tela`
+                    }
+                    muted={screenShares[0].id === currentUserId || localPlaybackMuted}
+                    volume={remoteScreenVolumes[screenShares[0].id] ?? 1}
+                    large
+                  />
+                </div>
+              ) : (
+                <ScreenShareGrid
+                  shares={screenShares}
+                  focusedId={focusedScreenShareId}
+                  onFocus={(peerId) => focusScreenShare(peerId, false)}
+                  currentUserId={currentUserId}
+                  localPlaybackMuted={localPlaybackMuted}
+                  remoteVolumes={remoteScreenVolumes}
+                  onVolumeContext={(e, peerId) => openVolumeMenu(e, { kind: 'screen', peerId })}
+                />
+              )}
             </div>
-          )}
-          {screenShares.length > 1 && (
-            <ScreenShareGrid
-              shares={screenShares}
-              currentUserId={currentUserId}
-              localPlaybackMuted={localPlaybackMuted}
-              remoteVolumes={remoteScreenVolumes}
-              onVolumeContext={(e, peerId) => openVolumeMenu(e, { kind: 'screen', peerId })}
-            />
           )}
 
           {localLiveStream && (
@@ -585,18 +624,21 @@ function GoLiveStreams({
 // compartilhando.
 function ScreenShareGrid({
   shares,
+  focusedId,
+  onFocus,
   currentUserId,
   localPlaybackMuted,
   remoteVolumes,
   onVolumeContext
 }: {
   shares: { id: string; stream: MediaStream; label: string }[]
+  focusedId: string | null
+  onFocus: (peerId: string) => void
   currentUserId: string
   localPlaybackMuted: boolean
   remoteVolumes: Record<string, number>
   onVolumeContext: (e: React.MouseEvent, peerId: string) => void
 }) {
-  const [focusedId, setFocusedId] = useState<string | null>(null)
   const focused = shares.find((s) => s.id === focusedId) ?? shares[0]
   const isOwnFocused = focused.id === currentUserId
 
@@ -620,7 +662,7 @@ function ScreenShareGrid({
         {shares.map((share) => (
           <button
             key={share.id}
-            onClick={() => setFocusedId(share.id)}
+            onClick={() => onFocus(share.id)}
             className={`bevel-sm shrink-0 overflow-hidden border transition ${
               share.id === focused.id ? 'border-volt' : 'border-line hover:border-mist-dim'
             }`}

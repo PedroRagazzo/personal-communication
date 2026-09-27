@@ -70,6 +70,11 @@ interface VoiceState {
   // precisa saber se deve pedir som de novo.
   screenShareIncludesAudio: boolean
   remoteScreenStreams: Record<string, MediaStream>
+  // v1.9.1 — qual tela fica em destaque na grade (VoicePanel), e quando foi
+  // o último pedido de "ir até ela" (botão TELA na lista de canais/da call):
+  // só um pedido recente rola a tela, não toda vez que o VoicePanel monta.
+  focusedScreenShareId: string | null
+  screenFocusRequestedAt: number | null
   videoEnabled: boolean
   localCameraStream: MediaStream | null
   remoteCameraStreams: Record<string, MediaStream>
@@ -85,6 +90,7 @@ interface VoiceState {
   setMicSensitivity: (value: number) => void
   applyInputDevice: () => Promise<void>
   setRemoteMicVolume: (peerId: string, volume: number) => void
+  focusScreenShare: (peerId: string, scrollIntoView?: boolean) => void
   setRemoteScreenVolume: (peerId: string, volume: number) => void
   // Chamadas pelo goLiveStore e por essa própria store (startScreenShare/
   // stopScreenShare) — ver o comentário de `localPlaybackMuted` acima e de
@@ -151,6 +157,8 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
   screenShareQuality: null,
   screenShareIncludesAudio: false,
   remoteScreenStreams: {},
+  focusedScreenShareId: null,
+  screenFocusRequestedAt: null,
   videoEnabled: false,
   localCameraStream: null,
   remoteCameraStreams: {},
@@ -456,6 +464,8 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
       screenShareQuality: null,
       screenShareIncludesAudio: false,
       remoteScreenStreams: {},
+      focusedScreenShareId: null,
+      screenFocusRequestedAt: null,
       videoEnabled: false,
       localCameraStream: null,
       remoteCameraStreams: {}
@@ -785,6 +795,13 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
   // escolhe localmente).
   setRemoteMicVolume: (peerId, volume) => {
     set((state) => ({ remoteMicVolumes: { ...state.remoteMicVolumes, [peerId]: volume } }))
+  },
+
+  focusScreenShare: (peerId, scrollIntoView = true) => {
+    set((state) => ({
+      focusedScreenShareId: peerId,
+      screenFocusRequestedAt: scrollIntoView ? Date.now() : state.screenFocusRequestedAt
+    }))
   },
 
   // Idem, mas pro som de uma tela compartilhada remota.

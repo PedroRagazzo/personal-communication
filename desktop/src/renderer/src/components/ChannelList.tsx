@@ -16,6 +16,7 @@ export function ChannelList({
   voiceParticipants,
   speakingUserIds,
   voiceOccupancy,
+  onWatchScreen,
   footer
 }: {
   server: ServerSummary | null
@@ -31,6 +32,7 @@ export function ChannelList({
   voiceParticipants: VoiceParticipant[]
   speakingUserIds: Set<string>
   voiceOccupancy: Record<string, string[]>
+  onWatchScreen: (userId: string) => void
   footer?: ReactNode
 }) {
   const [creating, setCreating] = useState(false)
@@ -160,6 +162,15 @@ export function ChannelList({
                         <span className={`truncate text-xs ${speaking ? 'text-mist' : 'text-mist-dim'}`}>
                           {participantLabel(p.userId)}
                         </span>
+                        {p.screen_sharing && (
+                          <button
+                            onClick={() => onWatchScreen(p.userId)}
+                            title="Ver a tela compartilhada"
+                            className="ml-auto shrink-0 border border-plasma/60 bg-plasma/10 px-1 font-mono text-[9px] font-bold tracking-wide text-plasma transition hover:bg-plasma/25"
+                          >
+                            TELA
+                          </button>
+                        )}
                         {p.muted && (
                           <span title="Mutado" className="shrink-0 text-[10px] text-plasma">
                             🔇

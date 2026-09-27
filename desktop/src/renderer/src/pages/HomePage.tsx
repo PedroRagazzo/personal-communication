@@ -41,6 +41,7 @@ export function HomePage() {
   const joinVoice = useVoiceStore((s) => s.join)
   const toggleMute = useVoiceStore((s) => s.toggleMute)
   const toggleDeafen = useVoiceStore((s) => s.toggleDeafen)
+  const focusScreenShare = useVoiceStore((s) => s.focusScreenShare)
   const joinGoLive = useGoLiveStore((s) => s.join)
 
   const loadSettingsForUser = useSettingsStore((s) => s.loadForUser)
@@ -122,6 +123,10 @@ export function HomePage() {
         voiceParticipants={voiceParticipants}
         speakingUserIds={speakingUserIds}
         voiceOccupancy={voiceOccupancy}
+        onWatchScreen={(userId) => {
+          if (voiceChannelId) selectChannel(voiceChannelId)
+          focusScreenShare(userId)
+        }}
         footer={<VoiceStatusBar channels={channels} onOpenChannel={selectChannel} />}
       />
       <div className="flex flex-1 flex-col">
