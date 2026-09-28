@@ -1,4 +1,4 @@
-# Infraestrutura de desenvolvimento local para o TORA DOS BURRO.
+# Infraestrutura de desenvolvimento local para o TORA.
 # Não inclui a aplicação em si (isso começa na FASE 1 do roadmap) — só as
 # dependências de Data Plane e Media Plane que o backend vai precisar.
 #

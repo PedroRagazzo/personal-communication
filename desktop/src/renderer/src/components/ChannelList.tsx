@@ -59,7 +59,7 @@ export function ChannelList({
     <aside className="flex w-60 shrink-0 flex-col border-r border-line-soft bg-panel">
       <div className="flex items-center justify-between border-b border-line-soft px-4 py-3.5">
         <span className="truncate font-display text-sm font-bold tracking-wide text-mist">
-          {server ? server.name : 'TORA DOS BURRO'}
+          {server ? server.name : 'TORA'}
         </span>
         {server && (
           <button

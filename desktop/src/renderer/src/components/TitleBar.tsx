@@ -31,7 +31,7 @@ export function TitleBar() {
           T
         </span>
         <span className="font-display text-[11px] font-bold tracking-[0.25em] text-mist-dim">
-          TORA DOS BURRO
+          TORA
         </span>
       </div>
 

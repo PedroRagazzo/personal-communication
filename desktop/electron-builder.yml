@@ -1,5 +1,12 @@
+# O nome que aparece (janela, atalho, "Aplicativos", instalador) é só
+# productName. appId, executableName e o "name" do package.json continuam
+# os antigos de propósito: o appId é a chave do registro que faz o instalador
+# novo substituir o antigo (trocar instala um segundo app do lado); o "name"
+# decide a pasta de instalação e a pasta de dados (%APPDATA%\tora-dos-burro-desktop,
+# onde ficam a sessão e as configurações — trocar desloga todo mundo); e o
+# .exe mantém o nome pra não quebrar atalhos fixados na barra de tarefas.
 appId: com.toradosburro.desktop
-productName: TORA DOS BURRO
+productName: TORA
 directories:
   buildResources: build
 files:
@@ -25,7 +32,7 @@ win:
       arch:
         - x64
 nsis:
-  artifactName: ${name}-${version}-setup.${ext}
+  artifactName: tora-${version}-setup.${ext}
   shortcutName: ${productName}
   uninstallDisplayName: ${productName}
   createDesktopShortcut: always

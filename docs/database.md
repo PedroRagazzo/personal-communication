@@ -1,4 +1,4 @@
-# Modelo de dados — TORA DOS BURRO
+# Modelo de dados — TORA
 
 Banco: PostgreSQL via Ecto. Este é o modelo inicial (FASE 0); migrations reais são criadas incrementalmente a partir da FASE 2.
 

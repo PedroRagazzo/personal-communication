@@ -1,4 +1,4 @@
-# Arquitetura — TORA DOS BURRO
+# Arquitetura — TORA
 
 ## Visão geral
 

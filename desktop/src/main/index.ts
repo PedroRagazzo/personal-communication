@@ -338,10 +338,10 @@ function quitApp(): void {
 
 function createTray(): void {
   tray = new Tray(nativeImage.createFromPath(trayIconPath()))
-  tray.setToolTip('TORA DOS BURRO')
+  tray.setToolTip('TORA')
   tray.setContextMenu(
     Menu.buildFromTemplate([
-      { label: 'Abrir TORA DOS BURRO', click: showMainWindow },
+      { label: 'Abrir TORA', click: showMainWindow },
       { type: 'separator' },
       { label: 'Sair', click: quitApp }
     ])

@@ -27,10 +27,7 @@ export function RegisterPage({ onSwitchToLogin }: { onSwitchToLogin: () => void 
           <div className="bevel-sm flex h-11 w-11 shrink-0 items-center justify-center bg-volt text-void">
             <span className="font-display text-xl font-bold">T</span>
           </div>
-          <div className="leading-none">
-            <p className="font-display text-xl font-bold tracking-wide text-mist">TORA</p>
-            <p className="font-mono text-[11px] tracking-[0.3em] text-mist-dim">DOS BURRO</p>
-          </div>
+          <p className="font-display text-2xl font-bold tracking-wide text-mist">TORA</p>
         </div>
 
         <form

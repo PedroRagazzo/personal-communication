@@ -1,4 +1,4 @@
-# Segurança — TORA DOS BURRO
+# Segurança — TORA
 
 Regra que atravessa tudo: **nunca confiar no cliente.** Toda permissão é validada no servidor, revalidada a cada ação — nunca a partir de uma claim vinda do cliente.
 
