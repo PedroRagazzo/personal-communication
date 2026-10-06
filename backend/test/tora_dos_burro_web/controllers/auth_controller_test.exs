@@ -116,6 +116,22 @@ defmodule ToraDosBurroWeb.AuthControllerTest do
       assert %{"access_token" => new_access_token} = json_response(refresh_conn, 200)
       assert is_binary(new_access_token)
 
+      # O token renovado tem que funcionar de verdade numa rota protegida —
+      # antes de v1.9.3 o refresh devolvia um token que nunca era gravado no
+      # guardian_db, então todo uso dele dava 401 (sessão "esquecida" ao
+      # reabrir o app depois de 15min).
+      refreshed_me_conn =
+        build_conn()
+        |> put_req_header("authorization", "Bearer #{new_access_token}")
+        |> get(~p"/api/v1/users/me")
+
+      assert %{"username" => "pedro"} = json_response(refreshed_me_conn, 200)
+
+      assert {:ok, %{"typ" => "access", "exp" => exp, "iat" => iat}} =
+               ToraDosBurro.Guardian.decode_and_verify(new_access_token)
+
+      assert exp - iat == 15 * 60
+
       logout_conn = post(build_conn(), ~p"/api/v1/auth/logout", refresh_token: refresh_token)
       assert response(logout_conn, 204)
 

@@ -42,7 +42,7 @@ defmodule ToraDosBurroWeb.AuthController do
 
   def refresh(conn, %{"refresh_token" => refresh_token}) do
     with {:ok, _old_stuff, {new_access_token, _claims}} <-
-           Guardian.exchange(refresh_token, "refresh", "access") do
+           Guardian.exchange(refresh_token, "refresh", "access", ttl: {15, :minutes}) do
       json(conn, %{access_token: new_access_token})
     else
       {:error, _reason} ->

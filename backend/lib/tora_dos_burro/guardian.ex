@@ -37,6 +37,18 @@ defmodule ToraDosBurro.Guardian do
     end
   end
 
+  # `Guardian.exchange/4` (usado por POST /auth/refresh) cria o token novo
+  # sem passar por `after_encode_and_sign`, e o Guardian.DB não tem
+  # `on_exchange` próprio — sem gravar aqui, o access token renovado nunca
+  # existia no banco e `on_verify` o rejeitava sempre (401). O refresh token
+  # antigo continua válido de propósito: o cliente reusa o mesmo por 30 dias.
+  def on_exchange(old_stuff, {new_token, new_claims} = new_stuff, _options) do
+    with {:ok, _} <-
+           Guardian.DB.after_encode_and_sign(%{}, new_claims["typ"], new_claims, new_token) do
+      {:ok, old_stuff, new_stuff}
+    end
+  end
+
   def on_revoke(claims, token, _options) do
     with {:ok, _} <- Guardian.DB.on_revoke(claims, token) do
       {:ok, claims}

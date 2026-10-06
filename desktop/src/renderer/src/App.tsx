@@ -8,6 +8,7 @@ import { TitleBar } from './components/TitleBar'
 export default function App() {
   const status = useAuthStore((s) => s.status)
   const bootstrap = useAuthStore((s) => s.bootstrap)
+  const authError = useAuthStore((s) => s.error)
   const [screen, setScreen] = useState<'login' | 'register'>('login')
 
   useEffect(() => {
@@ -19,8 +20,9 @@ export default function App() {
       <TitleBar />
       <div className="min-h-0 flex-1">
         {status === 'loading' && (
-          <div className="flex h-full items-center justify-center bg-void font-mono text-sm text-mist-dim">
+          <div className="flex h-full flex-col items-center justify-center gap-2 bg-void font-mono text-sm text-mist-dim">
             CARREGANDO…
+            {authError && <span className="text-xs text-plasma">{authError}</span>}
           </div>
         )}
         {status === 'authenticated' && <HomePage />}

@@ -16,6 +16,11 @@ const REFRESH_TOKEN_KEY = 'refresh_token'
 // vivo num app de verdade, não em teste automatizado).
 const TOKEN_REFRESH_INTERVAL_MS = 10 * 60 * 1000
 
+// Abrir o app sem conseguir falar com o servidor não desloga: tenta de novo
+// a cada 5s, mantendo a sessão salva (ver `bootstrap`).
+const BOOTSTRAP_RETRY_MS = 5000
+let bootstrapRetryTimer: ReturnType<typeof setTimeout> | null = null
+
 let refreshTimer: ReturnType<typeof setInterval> | null = null
 
 function startTokenRefreshLoop(refreshToken: string): void {
@@ -83,7 +88,7 @@ export const useAuthStore = create<AuthState>((set) => ({
         const user = await api.me(accessToken)
         connectSocket(accessToken)
         startTokenRefreshLoop(refreshToken)
-        set({ status: 'authenticated', user, accessToken })
+        set({ status: 'authenticated', user, accessToken, error: null })
         return
       } catch (err) {
         if (err instanceof api.ApiError && err.status === 401) {
@@ -92,15 +97,31 @@ export const useAuthStore = create<AuthState>((set) => ({
           await window.api.secureStorage.set(ACCESS_TOKEN_KEY, access_token)
           connectSocket(access_token)
           startTokenRefreshLoop(refreshToken)
-          set({ status: 'authenticated', user, accessToken: access_token })
+          set({ status: 'authenticated', user, accessToken: access_token, error: null })
           return
         }
         throw err
       }
     } catch (err) {
       console.error('falha ao restaurar sessão', err)
-      await clearStoredTokens().catch(() => {})
-      set({ status: 'unauthenticated' })
+      // Só um 401 (refresh token recusado pelo servidor) significa sessão
+      // morta de verdade. Qualquer outra falha — servidor fora do ar durante
+      // um deploy, internet ainda não conectada — apagava os tokens antes e
+      // deslogava a pessoa à toa; agora mantém a sessão e tenta de novo.
+      if (err instanceof api.ApiError && err.status === 401) {
+        await clearStoredTokens().catch(() => {})
+        set({ status: 'unauthenticated', error: null })
+        return
+      }
+      // `fetch` rejeita com TypeError quando nem chega no servidor; 5xx é o
+      // Traefik/Phoenix respondendo durante um redeploy.
+      if ((err instanceof api.ApiError && err.status >= 500) || err instanceof TypeError) {
+        set({ status: 'loading', error: 'sem conexão com o servidor — tentando de novo…' })
+        if (bootstrapRetryTimer) clearTimeout(bootstrapRetryTimer)
+        bootstrapRetryTimer = setTimeout(() => useAuthStore.getState().bootstrap(), BOOTSTRAP_RETRY_MS)
+        return
+      }
+      set({ status: 'unauthenticated', error: null })
     }
   },
 
