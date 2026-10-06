@@ -1,0 +1,44 @@
+# Backup diário do Postgres de produção, guardado no próprio VPS — via
+# Dokploy, Compose Type "Docker Compose" (mesmo esquema do coturn). O backup
+# nativo do Dokploy só grava em S3; o usuário escolheu manter no VPS, então
+# isto roda à parte: prodrigestivill/postgres-backup-local faz `pg_dump`
+# num cron e mantém rotação (7 diários, 4 semanais, 6 mensais — os padrões
+# da imagem) em /var/backups/tora-postgres no host.
+#
+# Protege contra apagar/estragar dados sem querer, NÃO contra perder o VPS
+# ou o disco (decisão consciente do usuário — dá pra copiar a pasta pra fora
+# de vez em quando, ou trocar pra S3 depois).
+#
+# Tudo vem da aba "Environment" deste serviço no Dokploy (nada commitado
+# aqui), copiado da aba do serviço Postgres ("Internal Credentials"):
+#   PG_MAJOR          versão major do Postgres (a tag da imagem dele, ex.: 16)
+#                     — pg_dump precisa ser da mesma versão ou mais nova
+#   POSTGRES_HOST     "Internal Host" do Postgres
+#   POSTGRES_DB       nome do banco
+#   POSTGRES_USER     usuário
+#   POSTGRES_PASSWORD senha
+#
+# Roda como root (a imagem não define USER), então grava no bind mount sem
+# precisar de `chown` no host. Restore e conferência: docs/roadmap.md.
+
+services:
+  postgres-backup:
+    image: prodrigestivill/postgres-backup-local:${PG_MAJOR}
+    restart: unless-stopped
+    environment:
+      POSTGRES_HOST: ${POSTGRES_HOST}
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      SCHEDULE: "@daily"
+      BACKUP_ON_START: "TRUE"
+    volumes:
+      - /var/backups/tora-postgres:/backups
+    networks:
+      - dokploy-network
+
+# Rede overlay do Dokploy, onde o Postgres gerenciado está — sem isso o
+# container não acha o "Internal Host".
+networks:
+  dokploy-network:
+    external: true
