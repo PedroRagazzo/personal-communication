@@ -68,6 +68,7 @@ export function VoicePanel({
   const remoteGoLiveVolumes = useGoLiveStore((s) => s.remoteVolumes)
   const setRemoteGoLiveVolume = useGoLiveStore((s) => s.setRemoteVolume)
   const goLiveError = useGoLiveStore((s) => s.error)
+  const goLiveUnavailable = useGoLiveStore((s) => s.unavailable)
   const joinGoLive = useGoLiveStore((s) => s.join)
   const leaveGoLive = useGoLiveStore((s) => s.leave)
   const startGoLive = useGoLiveStore((s) => s.startGoLive)
@@ -317,14 +318,16 @@ export function VoicePanel({
             {screenSharing && screenShareQuality && (
               <ScreenShareQualityMenu quality={screenShareQuality} onChange={updateScreenShareQuality} />
             )}
-            <VoiceButton
-              onClick={() => (isLive ? stopGoLive() : setPickerTarget('golive'))}
-              active={isLive}
-              activeLabel="PARAR TRANSMISSÃO"
-              label="IR AO VIVO"
-              disabled={goLiveStatus !== 'connected' && !isLive}
-              title={goLiveStatus !== 'connected' ? 'Conectando ao Go Live…' : undefined}
-            />
+            {!goLiveUnavailable && (
+              <VoiceButton
+                onClick={() => (isLive ? stopGoLive() : setPickerTarget('golive'))}
+                active={isLive}
+                activeLabel="PARAR TRANSMISSÃO"
+                label="IR AO VIVO"
+                disabled={goLiveStatus !== 'connected' && !isLive}
+                title={goLiveStatus !== 'connected' ? 'Conectando ao Go Live…' : undefined}
+              />
+            )}
             <button
               onClick={handleLeave}
               className="bevel-sm border border-plasma/60 bg-plasma/10 px-4 py-2 font-display text-xs font-bold tracking-wide text-plasma transition hover:bg-plasma/20"

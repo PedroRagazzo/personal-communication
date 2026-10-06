@@ -58,6 +58,14 @@ interface GoLiveState {
   // deveria voltar ao padrão só por sair e entrar de novo na mesma
   // transmissão), só em leave().
   remoteVolumes: Record<string, number>
+  // `true` quando a última tentativa de conectar ao LiveKit falhou — hoje
+  // sempre em produção, que não tem servidor LiveKit (LIVEKIT_URL é um
+  // placeholder). A UI esconde o Go Live inteiro nesse caso em vez de
+  // mostrar um erro vermelho a cada call (v1.9.4). Sobrevive ao leave() de
+  // propósito, pra o botão não piscar "Conectando…" a cada call nova; só
+  // volta a `false` quando uma conexão der certo, então instalar o LiveKit
+  // reativa tudo sem mudar código.
+  unavailable: boolean
   error: string | null
   join: (channelId: string) => Promise<void>
   leave: () => void
@@ -95,6 +103,7 @@ export const useGoLiveStore = create<GoLiveState>((set, get) => ({
   remoteStreams: {},
   watchingUserIds: new Set(),
   remoteVolumes: {},
+  unavailable: false,
   error: null,
 
   join: async (channelId) => {
@@ -227,17 +236,14 @@ export const useGoLiveStore = create<GoLiveState>((set, get) => ({
       await liveRoom.connect(url, token, { autoSubscribe: false })
     } catch (err) {
       channel.leave()
-      set({
-        status: 'idle',
-        channelId: null,
-        error: err instanceof Error ? `Go Live: ${err.message}` : 'não foi possível conectar ao LiveKit'
-      })
+      console.warn('Go Live indisponível (LiveKit não respondeu)', err)
+      set({ status: 'idle', channelId: null, unavailable: true })
       return
     }
 
     phoenixChannel = channel
     room = liveRoom
-    set({ status: 'connected', channelId, participants: [], error: null })
+    set({ status: 'connected', channelId, participants: [], unavailable: false, error: null })
   },
 
   leave: () => {
